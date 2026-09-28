@@ -1,0 +1,1341 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1B1F1E">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>Pointage C50</title>
+</head>
+<body>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EDEFEC; --surface:#FFFFFF; --surface-2:#F4F5F3; --ink:#161A19; --ink-2:#4A5350; --muted:#77817D;
+  --line:#D3D9D6; --line-2:#BCC4C0; --accent:#C8430F; --accent-ink:#FFFFFF; --accent-soft:#F8E4DA;
+  --hit:#087F92; --good:#2B7A4B; --warn:#A86A12; --crit:#B42318; --stage:#262A29;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#111413; --surface:#191D1C; --surface-2:#202523; --ink:#E7ECE9; --ink-2:#ADB6B2; --muted:#7D8783;
+    --line:#2C3331; --line-2:#3B4441; --accent:#F06A30; --accent-ink:#1A0E08; --accent-soft:#3A2218;
+    --hit:#2CC3D8; --good:#5CC48A; --warn:#E0A443; --crit:#F2766B; --stage:#0B0D0C;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111413; --surface:#191D1C; --surface-2:#202523; --ink:#E7ECE9; --ink-2:#ADB6B2; --muted:#7D8783;
+  --line:#2C3331; --line-2:#3B4441; --accent:#F06A30; --accent-ink:#1A0E08; --accent-soft:#3A2218;
+  --hit:#2CC3D8; --good:#5CC48A; --warn:#E0A443; --crit:#F2766B; --stage:#0B0D0C;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.5;padding-inline:16px;padding-block:0 40px}
+.wrap{max-width:1280px;margin:0 auto}
+header.top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-block:14px;border-bottom:1px solid var(--line);margin-bottom:16px}
+.brand{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.04em;text-transform:uppercase;line-height:1;display:flex;align-items:baseline;gap:8px}
+.brand small{font-family:var(--mono);font-weight:400;font-size:11px;letter-spacing:.02em;color:var(--muted);text-transform:none}
+.tabs{display:flex;gap:4px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:3px}
+.tab{border:0;background:transparent;color:var(--ink-2);font:600 13px var(--body);padding:6px 14px;border-radius:999px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+.sync{margin-left:auto;font:500 12px var(--mono);color:var(--muted);display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.sync.ok .dot{background:var(--good)} .sync.local .dot{background:var(--warn)}
+button,select,input{font:inherit;color:inherit}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink);padding:7px 12px;border-radius:var(--r);font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--ink-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--crit);border-color:var(--crit);background:transparent}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:var(--r);overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:7px 11px;font-size:13px;font-weight:500;cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start}
+@media (max-width:980px){.grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:560px){.brand small{display:none}.stage{height:62vh}.sync{margin-left:0}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.stagecard{overflow:hidden}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px;border-bottom:1px solid var(--line)}
+.toolbar .sp{flex:1}
+.stage{position:relative;background:var(--stage);height:min(72vh,720px);min-height:340px;touch-action:none;user-select:none;-webkit-user-select:none}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+.badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.62);color:#fff;font:500 12px var(--mono);padding:4px 8px;border-radius:6px;pointer-events:none}
+.zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:6px}
+.zoom button{width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.55);color:#fff;font:600 18px var(--body);cursor:pointer}
+.hint{padding:10px 12px;font-size:13px;color:var(--ink-2);border-top:1px solid var(--line)}
+.hint b{color:var(--ink)}
+.side{display:flex;flex-direction:column;gap:16px}
+.sec{padding:14px}
+.sec h2{font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 10px;color:var(--ink-2)}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.field input,.field select{border:1px solid var(--line-2);background:var(--surface);border-radius:6px;padding:7px 8px;min-width:0;width:100%}
+.field.full{grid-column:1/-1}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.chip{border:1px solid var(--line-2);background:var(--surface-2);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:500;cursor:pointer}
+.chip[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
+.score{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.score .big{font-family:var(--display);font-weight:700;font-size:64px;line-height:.85;font-variant-numeric:tabular-nums}
+.score .of{font-family:var(--mono);color:var(--muted);font-size:13px;padding-bottom:4px}
+.kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.kv div{background:var(--surface-2);border-radius:6px;padding:7px 9px}
+.kv span{display:block;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.kv strong{font-family:var(--mono);font-weight:500;font-size:15px;font-variant-numeric:tabular-nums}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+.disp th,.disp td{padding:5px 4px;text-align:right;border-bottom:1px solid var(--line);font-size:13px}
+.disp th:first-child,.disp td:first-child{text-align:left}
+.disp thead th{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.disp td{font-family:var(--mono)}
+.disp td:first-child{font-family:var(--body);color:var(--ink-2)}
+.corr{margin-top:10px;padding:9px 10px;border-radius:6px;background:var(--accent-soft);font-size:13px}
+.corr b{font-family:var(--mono);font-weight:500}
+.shots{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.shots th,.shots td{padding:4px 8px;font-size:12.5px;text-align:right;border-bottom:1px solid var(--line)}
+.shots thead th{position:sticky;top:0;background:var(--surface-2);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.shots td{font-family:var(--mono)}
+.shots tr.fly td{color:var(--crit)}
+.flyl{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.flyl li{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:8px 10px;border-radius:6px;background:var(--surface-2);border-left:3px solid var(--crit)}
+.flyl b{font-family:var(--mono);font-weight:500}
+.flyl span{grid-column:2;color:var(--ink-2);font-size:13px}
+.cmp{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}
+.cmp div{background:var(--surface-2);border-radius:6px;padding:7px 9px}
+.cmp span{display:block;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.cmp strong{font-family:var(--mono);font-weight:500;font-size:14px}
+.axis{margin-top:10px;padding:9px 10px;border-radius:6px;background:var(--accent-soft);font-size:13px}
+.shots tr.split td:first-child::after{content:" ◌";color:var(--warn)}
+.muted{color:var(--muted)}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.msg{font-size:13px;margin-top:8px;min-height:1.2em}
+.msg.ok{color:var(--good)} .msg.err{color:var(--crit)}
+/* history */
+.hfilters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;padding:12px;border-bottom:1px solid var(--line)}
+.hfilters .field{width:auto;min-width:150px}
+.chartwrap{position:relative;padding:12px 12px 4px}
+.chartwrap svg{width:100%;height:auto;display:block}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font:500 12px var(--mono);padding:6px 8px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-110%)}
+.hsum{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 12px 12px}
+@media (max-width:640px){.hsum{grid-template-columns:repeat(2,1fr)} .kv{grid-template-columns:repeat(2,1fr)}}
+.hsum div{background:var(--surface-2);border-radius:6px;padding:8px 10px}
+.hsum span{display:block;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.hsum strong{font-family:var(--mono);font-weight:500;font-size:16px}
+.tablewrap{overflow-x:auto}
+.hist th,.hist td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;font-size:13px}
+.hist th:nth-child(-n+3),.hist td:nth-child(-n+3){text-align:left}
+.hist thead th{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--surface-2)}
+.hist tbody tr{cursor:pointer}
+.hist tbody tr:hover{background:var(--surface-2)}
+.hist tbody tr[aria-selected="true"]{background:var(--accent-soft)}
+.hist td{font-family:var(--mono)}
+.hist td:nth-child(2),.hist td:nth-child(3){font-family:var(--body)}
+.detail{display:grid;grid-template-columns:280px minmax(0,1fr);gap:16px;padding:14px;border-top:1px solid var(--line)}
+@media (max-width:720px){.detail{grid-template-columns:minmax(0,1fr)}}
+.detail svg{width:100%;max-width:320px;height:auto;display:block}
+.empty{padding:28px 14px;text-align:center;color:var(--muted)}
+.exportbox{width:100%;height:140px;font:12px var(--mono);border:1px solid var(--line-2);border-radius:6px;padding:8px;background:var(--surface-2);color:var(--ink)}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--line-2);background:transparent}
+.sg{font-style:normal;text-transform:none}
+.kbd{font-family:var(--mono);font-size:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+@media (prefers-reduced-motion:no-preference){.btn,.chip,.tab{transition:background .15s,border-color .15s}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Pointage C50 <small>ISSF précision · 25/50 m</small></div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-an" aria-selected="true">Analyse</button>
+      <button class="tab" role="tab" id="tab-hi" aria-selected="false">Historique</button>
+    </nav>
+    <div class="sync" id="sync"><span class="dot"></span><span id="syncTxt">Chargement…</span></div>
+  </header>
+
+  <!-- ANALYSE -->
+  <section id="view-an">
+    <div class="grid">
+      <div class="card stagecard">
+        <div class="toolbar">
+          <label class="btn primary" for="fileCam">Prendre une photo</label>
+          <input id="fileCam" type="file" accept="image/*" capture="environment" hidden>
+          <label class="btn" for="fileGal">Importer</label>
+          <input id="fileGal" type="file" accept="image/*" hidden>
+          <span class="sp"></span>
+          <div class="seg" id="modes" role="group" aria-label="Mode d'édition">
+            <button data-mode="calib" aria-pressed="false">Calibrer</button>
+            <button data-mode="add" aria-pressed="true">Ajouter</button>
+            <button data-mode="del" aria-pressed="false">Supprimer</button>
+            <button data-mode="move" aria-pressed="false">Déplacer</button>
+          </div>
+        </div>
+        <div class="stage" id="stage">
+          <canvas id="cv"></canvas>
+          <div class="badge" id="badge">Exemple</div>
+          <div class="zoom">
+            <button id="zin" aria-label="Zoomer">+</button>
+            <button id="zout" aria-label="Dézoomer">−</button>
+            <button id="zfit" aria-label="Ajuster" style="font-size:12px">⤢</button>
+          </div>
+        </div>
+        <div class="toolbar" style="border-top:1px solid var(--line);border-bottom:0">
+          <button class="btn" id="bAutoCal">Recaler le visuel</button>
+          <button class="btn" id="bDetect">Détecter les impacts</button>
+          <button class="btn ghost" id="bPick" title="Toucher ensuite l'intérieur d'un trou">Couleur des trous <span id="hueSw" class="sw"></span></button>
+          <label class="btn" for="fileNext" id="bNext" title="Photographie la même cible après la série suivante">+ Photo série suivante</label>
+          <input id="fileNext" type="file" accept="image/*" hidden>
+          <button class="btn ghost" id="bUndo" disabled>Annuler</button>
+          <button class="btn ghost" id="bClear">Tout effacer</button>
+          <span class="sp"></span>
+          <span class="muted" id="nInfo" style="font-family:var(--mono);font-size:12px"></span>
+        </div>
+        <div class="hint" id="hint"></div>
+      </div>
+
+      <div class="side">
+        <div class="card sec">
+          <h2>Arme et distance</h2>
+          <div class="chips" id="presets">
+            <button class="chip" data-p="p320">P320 · 9 mm</button>
+            <button class="chip" data-p="wm">Bergara · .300 WM</button>
+            <button class="chip" data-p="blk">DDM4 300S · .300 BLK</button>
+          </div>
+          <div class="fields">
+            <div class="field full"><label for="fArme">Arme</label><input id="fArme" list="armeList" placeholder="ex. P320 X-Five Legion"><datalist id="armeList"></datalist></div>
+            <div class="field"><label for="fCal">Calibre (Ø trou)</label>
+              <select id="fCal">
+                <option value="5.6">.22 LR · 5,6 mm</option>
+                <option value="9.0" selected>9 mm Luger · 9,0 mm</option>
+                <option value="7.62">.30 / 7,62 · 7,6 mm</option>
+                <option value="7.82">.300 WM · 7,8 mm</option>
+                <option value="7.82|blk">.300 AAC Blackout · 7,8 mm</option>
+                <option value="11.43">.45 ACP · 11,4 mm</option>
+              </select></div>
+            <div class="field"><label for="fDist">Distance (m)</label>
+              <input id="fDist" type="number" inputmode="decimal" min="1" step="1" value="25" list="distList">
+              <datalist id="distList"><option value="10"><option value="15"><option value="25"><option value="50"><option value="100"><option value="200"></datalist></div>
+            <div class="field"><label for="fShots">Coups sur cette photo</label><input id="fShots" type="number" inputmode="numeric" min="0" step="1" placeholder="ex. 30"></div>
+            <div class="field"><label for="fClick">Valeur du clic</label><input id="fClick" type="number" inputmode="decimal" step="0.01" min="0" placeholder="facultatif"></div>
+            <div class="field"><label for="fUnit">Unité du clic</label>
+              <select id="fUnit"><option value="mrad">mrad</option><option value="moa">MOA</option></select></div>
+          </div>
+          <p class="note">Indique le nombre de coups tirés depuis la photo précédente : les trous qui se chevauchent sont découpés pour retrouver ce total. En séries, photographie la cible après chaque série avec « + Photo série suivante » : seuls les nouveaux trous sont comptés.</p>
+        </div>
+
+        <div class="card sec">
+          <h2>Points</h2>
+          <div class="score"><div class="big" id="sTot">0</div><div class="of" id="sOf">/ 0</div></div>
+          <div class="kv">
+            <div><span>Décimal</span><strong id="sDec">–</strong></div>
+            <div><span>Moy./coup</span><strong id="sAvg">–</strong></div>
+            <div><span>Mouches (X)</span><strong id="sX">–</strong></div>
+          </div>
+        </div>
+
+        <div class="card sec" id="serCard" hidden>
+          <h2>Séries</h2>
+          <div class="tablewrap"><table class="disp"><thead><tr><th>Série</th><th>Coups</th><th>Pts</th><th>Moy.</th><th><i class="sg">σ</i>R mm</th><th>PMI x</th><th>PMI y</th></tr></thead><tbody id="serBody"></tbody></table></div>
+          <div class="msg" id="serMsg"></div>
+        </div>
+
+        <div class="card sec">
+          <h2>Groupement</h2>
+          <table class="disp">
+            <thead><tr><th></th><th>mm</th><th>MOA</th><th>mrad</th></tr></thead>
+            <tbody id="dispBody"></tbody>
+          </table>
+          <div class="corr" id="corr" hidden></div>
+          <p class="note">Axes : x vers la droite, y vers le haut, origine au centre de la cible. Écart-types calculés sur n−1. La fourchette 95 % montre la précision de l'écart-type radial : plus il y a de coups, plus elle se resserre. Groupement (l'« écart » de la feuille de tir) = distance centre à centre des deux impacts les plus éloignés, tracée en pointillés blancs.</p>
+        </div>
+
+        <div class="card sec">
+          <h2>Coups écartés</h2>
+          <div id="flyBox"></div>
+          <p class="note">Un coup est « écarté » s'il sort à plus de 3 σ du cœur du groupement (centre médian, σ estimé sur la distance médiane). Sur un groupement normal, cela n'arrive qu'environ 1 fois sur 100 : c'est donc très probablement une faute de tir. Les pistes par direction valent pour le pistolet, pour un tireur <select id="fHand" style="font:inherit;border:1px solid var(--line-2);border-radius:4px;background:var(--surface);color:var(--ink)"><option value="droitier">droitier</option><option value="gauche">gaucher</option></select>.</p>
+        </div>
+
+        <div class="card sec">
+          <h2>Impacts</h2>
+          <div class="shots"><table><thead><tr><th>#</th><th>x mm</th><th>y mm</th><th>pts</th><th>déc.</th></tr></thead><tbody id="shotBody"></tbody></table></div>
+          <p class="note">◌ = impact séparé d'un trou groupé : vérifie-le sur l'image.</p>
+        </div>
+
+        <div class="card sec">
+          <h2>Enregistrer la séance</h2>
+          <div class="fields">
+            <div class="field"><label for="fDate">Date</label><input id="fDate" type="date"></div>
+            <div class="field"><label for="fPos">Position</label>
+              <select id="fPos"><option>Deux mains debout</option><option>Une main debout</option><option>Appui</option><option>Banc / bipied</option><option>Couché</option><option>Autre</option></select></div>
+            <div class="field full"><label for="fMun">Munition ou recette</label><input id="fMun" list="munList" placeholder="ex. S&amp;B 124 gr FMJ · ou 69 gr H1000 / 190 gr SMK"><datalist id="munList"></datalist></div>
+            <div class="field"><label for="fV0">Vitesse moy. (m/s)</label><input id="fV0" type="number" inputmode="decimal" min="0" placeholder="chrono, facultatif"></div>
+            <div class="field"><label for="fVsd">Écart-type vitesse</label><input id="fVsd" type="number" inputmode="decimal" min="0" placeholder="m/s"></div>
+            <div class="field full"><label for="fNote">Note</label><input id="fNote" placeholder="météo, fatigue, réglage…"></div>
+          </div>
+          <div class="row" style="margin-top:10px"><button class="btn primary" id="bSave">Enregistrer dans l'historique</button></div>
+          <div class="msg" id="saveMsg"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HISTORIQUE -->
+  <section id="view-hi" hidden>
+    <div class="card">
+      <div class="hfilters">
+        <div class="field"><label for="hArme">Arme</label><select id="hArme"></select></div>
+        <div class="field"><label for="hDist">Distance</label><select id="hDist"></select></div>
+        <div class="field"><label for="hMun">Munition</label><select id="hMun"></select></div>
+        <div class="field"><label for="hMetric">Courbe</label>
+          <select id="hMetric">
+            <option value="sdr">Écart-type radial (mm)</option>
+            <option value="sdrMoa">Écart-type radial (MOA)</option>
+            <option value="avg">Moyenne par coup</option>
+            <option value="off">Décalage du PMI (mm)</option>
+            <option value="es">Groupement (mm)</option>
+          </select></div>
+        <span style="flex:1"></span>
+        <button class="btn" id="bExport">Exporter CSV</button>
+        <button class="btn" id="bBackup" title="Toutes les séances, pour les transférer vers un autre appareil">Sauvegarder (.json)</button>
+        <label class="btn" for="fRestore">Restaurer</label>
+        <input id="fRestore" type="file" accept=".json,application/json" hidden>
+      </div>
+      <div class="msg" id="restoreMsg" style="padding:0 12px"></div>
+      <div id="exportArea" hidden style="padding:12px;border-bottom:1px solid var(--line)">
+        <p class="note" style="margin-top:0" id="exportLbl">Le téléchargement direct n'est pas disponible ici. Copie ce texte dans un fichier :</p>
+        <textarea class="exportbox" id="exportTxt" readonly></textarea>
+      </div>
+      <div class="chartwrap" id="chartWrap"><svg id="chart" viewBox="0 0 720 240" role="img" aria-label="Évolution"></svg><div class="tip" id="tip" hidden></div></div>
+      <div class="hsum" id="hsum"></div>
+      <div id="cmpBox"></div>
+      <div class="tablewrap">
+        <table class="hist"><thead><tr><th>Date</th><th>Arme</th><th>Munition</th><th>Dist.</th><th>Coups</th><th>Points</th><th>Moy.</th><th><i class="sg">σ</i>H mm</th><th><i class="sg">σ</i>V mm</th><th><i class="sg">σ</i>R mm</th><th><i class="sg">σ</i>R MOA</th><th>PMI mm</th><th>Écartés</th></tr></thead><tbody id="histBody"></tbody></table>
+      </div>
+      <div id="detail"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+"use strict";
+// ---------- C50 geometry (ISSF précision pistolet) ----------
+const ZONE_W = 25;           // mm entre anneaux
+const R_BLACK = 100;         // rayon du visuel noir (zones 7 à 10)
+const R_X = 12.5;            // 10 intérieur
+const MAX_R = 262;
+const MOA_PER_MRAD = 3.43775;
+
+const $ = id => document.getElementById(id);
+const calMm = () => parseFloat($("fCal").value) || 9;   // valeur « diamètre|clé » : deux calibres peuvent avoir le même Ø
+const fmt = (v, d=1) => (v==null||!isFinite(v)) ? "–" : v.toFixed(d).replace(".", ",");
+const sgn = (v, d=1) => (v==null||!isFinite(v)) ? "–" : (v>0?"+":"") + fmt(v, d);
+
+const state = {
+  img:null, handles:null, holes:[], mode:"add", view:{s:1,ox:0,oy:0},
+  undo:[], sample:true
+};
+const ls = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v==null?d:JSON.parse(v);}catch(e){return d;} },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+
+// ---------- scoring ----------
+function scoreOf(rmm, cal){
+  const s = rmm - cal/2;            // bord du trou le plus proche du centre
+  if (s > 10*ZONE_W) return {pts:0, dec:0, x:false};
+  const pts = s <= ZONE_W ? 10 : Math.max(0, 11 - Math.ceil(s/ZONE_W));
+  let dec = Math.floor((11 - s/ZONE_W)*10 + 1e-9)/10;
+  dec = Math.min(10.9, dec); if (dec < 1) dec = 0;
+  return {pts, dec, x: s <= R_X};
+}
+
+// Intervalle de confiance à 95 % d'un écart-type (loi du χ², approximation de Wilson-Hilferty)
+function chi2q(df, z){ const a = 2/(9*df); return df*Math.pow(1 - a + z*Math.sqrt(a), 3); }
+function sigmaCI(sd, df){ if (!(df>=2) || sd==null) return null; return [sd*Math.sqrt(df/chi2q(df, 1.959964)), sd*Math.sqrt(df/chi2q(df, -1.959964))]; }
+function computeStats(shots, cal, dist){
+  const n = shots.length;
+  const out = {n, total:0, dec:0, x:0};
+  shots.forEach(p => { const sc = scoreOf(Math.hypot(p.x,p.y), cal); out.total += sc.pts; out.dec += sc.dec; if (sc.x) out.x++; });
+  if (!n) return out;
+  const mx = shots.reduce((a,p)=>a+p.x,0)/n, my = shots.reduce((a,p)=>a+p.y,0)/n;
+  out.mx = mx; out.my = my; out.off = Math.hypot(mx,my); out.avg = out.total/n;
+  if (n >= 2){
+    let sx=0, sy=0, mr=0, es=0;
+    shots.forEach(p => { sx += (p.x-mx)**2; sy += (p.y-my)**2; mr += Math.hypot(p.x-mx,p.y-my); });
+    for (let i=0;i<n;i++) for (let j=i+1;j<n;j++){ const d = Math.hypot(shots[i].x-shots[j].x, shots[i].y-shots[j].y); if (d>es){ es=d; out.esI=i; out.esJ=j; } }
+    out.sdx = Math.sqrt(sx/(n-1)); out.sdy = Math.sqrt(sy/(n-1));
+    out.sdr = Math.hypot(out.sdx, out.sdy); out.mr = mr/n; out.es = es;
+    out.sdrCI = n >= 3 ? sigmaCI(out.sdr, 2*(n-1)) : null;
+  }
+  const k = dist > 0 ? 1/dist : null;   // mm/m = mrad
+  out.toMrad = v => (k==null||v==null) ? null : v*k;
+  out.toMoa = v => (k==null||v==null) ? null : v*k*MOA_PER_MRAD;
+  return out;
+}
+
+// ---------- coups écartés (fliers) ----------
+// Centre robuste = médiane des x et des y. Si les impacts suivent une loi normale circulaire,
+// la distance au centre suit une loi de Rayleigh : médiane = 1,1774 σ, et P(r > 3σ) ≈ 1 %.
+// Un impact au-delà de 3σ est donc très probablement une faute de tir plutôt que la dispersion normale.
+const CLOCK_R = {
+  12:"poignet qui remonte : anticipation du recul", 1:"talon de la main qui pousse : anticipation", 2:"talon de la main qui pousse : anticipation",
+  3:"pouce qui pousse, ou pas assez de doigt sur la détente", 4:"main qui se crispe au départ du coup", 5:"main qui se crispe au départ du coup",
+  6:"poignet qui plonge : anticipation vers le bas", 7:"coup de doigt : lâcher brutal, détente arrachée", 8:"coup de doigt : lâcher brutal, détente arrachée",
+  9:"trop de doigt sur la détente", 10:"suivi insuffisant, bras qui bouge au départ", 11:"suivi insuffisant, bras qui bouge au départ"
+};
+const median = a => { const b = a.slice().sort((x,y)=>x-y), m = b.length>>1; return b.length%2 ? b[m] : (b[m-1]+b[m])/2; };
+function analyzeFliers(shots, cal, dist, hand){
+  const n = shots.length; if (n < 5) return null;
+  const cx = median(shots.map(p=>p.x)), cy = median(shots.map(p=>p.y));
+  const r = shots.map(p => Math.hypot(p.x-cx, p.y-cy));
+  const sigma = Math.max(cal/2, median(r)/1.1774), lim = 3*sigma;
+  const flags = r.map(v => v > lim);
+  const core = shots.filter((p,i)=>!flags[i]);
+  const cs = computeStats(core, cal, dist);
+  const fl = [];
+  shots.forEach((p,i) => { if (!flags[i]) return;
+    const dx = p.x - cs.mx, dy = p.y - cs.my;
+    let deg = (90 - Math.atan2(dy,dx)*180/Math.PI + 360) % 360, h = Math.round(deg/30) % 12; if (h===0) h = 12;
+    const hr = hand === "gauche" ? (12 - h) || 12 : h;   // miroir pour un gaucher
+    fl.push({i, d: Math.hypot(dx,dy), ratio: r[i]/sigma, hour:h, label: CLOCK_R[hr]});
+  });
+  const all = computeStats(shots, cal, dist);
+  let axis = null;
+  if (cs.sdx && cs.sdy){
+    if (cs.sdy/cs.sdx >= 1.6) axis = {dir:"verticale", k:cs.sdy/cs.sdx, label:"respiration mal bloquée au départ du coup, ou bras qui s'affaisse"};
+    else if (cs.sdx/cs.sdy >= 1.6) axis = {dir:"horizontale", k:cs.sdx/cs.sdy, label:"pression latérale du doigt sur la détente ou prise en main irrégulière"};
+  }
+  return {cx, cy, sigma, lim, flags, fliers: fl, core: cs, all, axis};
+}
+
+// ---------- calibration ----------
+// handles = {t,r,b,l} en px image, posés sur le bord du visuel noir (Ø200 mm)
+function getCal(){
+  const h = state.handles; if (!h) return null;
+  const cx = (h.t.x+h.r.x+h.b.x+h.l.x)/4, cy = (h.t.y+h.r.y+h.b.y+h.l.y)/4;
+  const a = (h.r.x-h.l.x)/(2*R_BLACK), c = (h.r.y-h.l.y)/(2*R_BLACK);  // colonne x-mm
+  const b = (h.b.x-h.t.x)/(2*R_BLACK), d = (h.b.y-h.t.y)/(2*R_BLACK);  // colonne y-mm (vers le bas)
+  const det = a*d - b*c; if (Math.abs(det) < 1e-9) return null;
+  return {cx, cy, M:[a,b,c,d], Mi:[d/det, -b/det, -c/det, a/det], pxmm: Math.sqrt(Math.abs(det))};
+}
+function imgToMm(cal, x, y){ const dx=x-cal.cx, dy=y-cal.cy, m=cal.Mi; return {x: m[0]*dx+m[1]*dy, y: -(m[2]*dx+m[3]*dy)}; }
+function mmToImg(cal, x, y){ const m=cal.M, yd=-y; return {x: cal.cx + m[0]*x + m[1]*yd, y: cal.cy + m[2]*x + m[3]*yd}; }
+function handlesFrom(cx, cy, M){ // M = [a,b,c,d] px/mm
+  const p = (ux,uy) => ({x: cx + M[0]*ux + M[1]*uy, y: cy + M[2]*ux + M[3]*uy});
+  return {t:p(0,-R_BLACK), r:p(R_BLACK,0), b:p(0,R_BLACK), l:p(-R_BLACK,0)};
+}
+
+function grayOf(ctx, W, H){
+  const d = ctx.getImageData(0,0,W,H).data, g = new Uint8Array(W*H);
+  for (let i=0,j=0;i<g.length;i++,j+=4) g[i] = (d[j]*77 + d[j+1]*150 + d[j+2]*29) >> 8;
+  return g;
+}
+function otsu(g){
+  const h = new Float64Array(256); for (const v of g) h[v]++;
+  let sum=0; for (let i=0;i<256;i++) sum += i*h[i];
+  let sB=0, wB=0, best=0, t=128; const tot=g.length;
+  for (let i=0;i<256;i++){ wB += h[i]; if(!wB) continue; const wF = tot-wB; if(!wF) break; sB += i*h[i];
+    const mB = sB/wB, mF = (sum-sB)/wF, v = wB*wF*(mB-mF)**2; if (v>best){best=v;t=i;} }
+  return t;
+}
+function components(mask, W, H){
+  const lab = new Int32Array(W*H), comps=[], st = new Int32Array(W*H); let n=0;
+  for (let i=0;i<mask.length;i++){
+    if (!mask[i] || lab[i]) continue;
+    n++; let sp=0; st[sp++]=i; lab[i]=n;
+    const c={id:n, area:0, minx:W, maxx:0, miny:H, maxy:0, touch:false, px:[]};
+    while (sp){
+      const k = st[--sp], x = k%W, y = (k/W)|0;
+      c.area++; c.px.push(k);
+      if (x<c.minx)c.minx=x; if(x>c.maxx)c.maxx=x; if(y<c.miny)c.miny=y; if(y>c.maxy)c.maxy=y;
+      if (x===0||y===0||x===W-1||y===H-1) c.touch=true;
+      if (x>0   && mask[k-1] && !lab[k-1]){lab[k-1]=n; st[sp++]=k-1;}
+      if (x<W-1 && mask[k+1] && !lab[k+1]){lab[k+1]=n; st[sp++]=k+1;}
+      if (y>0   && mask[k-W] && !lab[k-W]){lab[k-W]=n; st[sp++]=k-W;}
+      if (y<H-1 && mask[k+W] && !lab[k+W]){lab[k+W]=n; st[sp++]=k+W;}
+    }
+    comps.push(c);
+  }
+  return {lab, comps};
+}
+
+function autoCalib(){
+  const img = state.img; if (!img) return false;
+  const s = Math.min(1, 720/Math.max(img.width, img.height));
+  const W = Math.round(img.width*s), H = Math.round(img.height*s);
+  const c = document.createElement("canvas"); c.width=W; c.height=H;
+  const x = c.getContext("2d", {willReadFrequently:true}); x.drawImage(img,0,0,W,H);
+  const g = grayOf(x, W, H), t = otsu(g);
+  const mask = new Uint8Array(W*H); for (let i=0;i<g.length;i++) mask[i] = g[i] < t ? 1 : 0;
+  const {lab, comps} = components(mask, W, H);
+  let best=null;
+  for (const cp of comps){
+    if (cp.touch || cp.area < 0.004*W*H) continue;
+    const bw = cp.maxx-cp.minx+1, bh = cp.maxy-cp.miny+1, fill = cp.area/(bw*bh), asp = bw/bh;
+    if (fill < 0.5 || fill > 0.9 || asp < 0.6 || asp > 1.67) continue;
+    if (!best || cp.area > best.area) best = cp;
+  }
+  if (!best){ // repli : visuel supposé au centre de l'image
+    const R = Math.min(img.width, img.height)*0.2/R_BLACK;
+    state.handles = handlesFrom(img.width/2, img.height/2, [R,0,0,R]);
+    return false;
+  }
+  // remplit les trous internes (impacts, chiffres) puis moments d'inertie
+  const bx0=best.minx, by0=best.miny, bw=best.maxx-bx0+1, bh=best.maxy-by0+1;
+  const out = new Uint8Array(bw*bh), st=[];
+  const inC = (xx,yy) => lab[(yy+by0)*W + xx+bx0] === best.id;
+  for (let xx=0;xx<bw;xx++){ for (const yy of [0,bh-1]) if(!inC(xx,yy)&&!out[yy*bw+xx]){out[yy*bw+xx]=1;st.push(yy*bw+xx);} }
+  for (let yy=0;yy<bh;yy++){ for (const xx of [0,bw-1]) if(!inC(xx,yy)&&!out[yy*bw+xx]){out[yy*bw+xx]=1;st.push(yy*bw+xx);} }
+  while (st.length){ const k=st.pop(), xx=k%bw, yy=(k/bw)|0;
+    for (const [nx,ny] of [[xx-1,yy],[xx+1,yy],[xx,yy-1],[xx,yy+1]]){
+      if (nx<0||ny<0||nx>=bw||ny>=bh) continue; const kk=ny*bw+nx;
+      if (!out[kk] && !inC(nx,ny)){ out[kk]=1; st.push(kk); } } }
+  let n=0, sx=0, sy=0;
+  for (let yy=0;yy<bh;yy++) for (let xx=0;xx<bw;xx++) if(!out[yy*bw+xx]){ n++; sx+=xx; sy+=yy; }
+  const mx=sx/n, my=sy/n; let cxx=0, cyy=0, cxy=0;
+  for (let yy=0;yy<bh;yy++) for (let xx=0;xx<bw;xx++) if(!out[yy*bw+xx]){ const dx=xx-mx, dy=yy-my; cxx+=dx*dx; cyy+=dy*dy; cxy+=dx*dy; }
+  cxx=4*cxx/n; cyy=4*cyy/n; cxy=4*cxy/n;   // 4Σ = M·Mᵀ (en px de travail, rayon 1)
+  const det = Math.sqrt(Math.max(1e-9, cxx*cyy-cxy*cxy)), tr = Math.sqrt(cxx+cyy+2*det);
+  const k = 1/(s*R_BLACK*tr);
+  const M = [(cxx+det)*k, cxy*k, cxy*k, (cyy+det)*k];
+  state.handles = handlesFrom((mx+bx0+0.5)/s, (my+by0+0.5)/s, M);
+  return true;
+}
+
+// ---------- détection des impacts ----------
+function boxSum1D(src, dst, W, H, k, horiz){
+  // somme glissante de fenêtre 2k+1 le long d'un axe
+  if (horiz){
+    for (let y=0;y<H;y++){ let acc=0; const o=y*W;
+      for (let x=-k;x<W+k;x++){ const add=x+k, rem=x-k-1;
+        if (add<W) acc+=src[o+add]; if (rem>=0) acc-=src[o+rem]; if (x>=0&&x<W) dst[o+x]=acc; } }
+  } else {
+    for (let x=0;x<W;x++){ let acc=0;
+      for (let y=-k;y<H+k;y++){ const add=y+k, rem=y-k-1;
+        if (add<H) acc+=src[add*W+x]; if (rem>=0) acc-=src[rem*W+x]; if (y>=0&&y<H) dst[y*W+x]=acc; } }
+  }
+}
+function morph(mask, W, H, k, erode){
+  const a = new Uint16Array(W*H), b = new Uint16Array(W*H), full = 2*k+1, o = new Uint8Array(W*H);
+  boxSum1D(mask, a, W, H, k, true);
+  const m1 = new Uint8Array(W*H); for (let i=0;i<m1.length;i++) m1[i] = erode ? (a[i]===full?1:0) : (a[i]>0?1:0);
+  boxSum1D(m1, b, W, H, k, false);
+  for (let i=0;i<o.length;i++) o[i] = erode ? (b[i]===full?1:0) : (b[i]>0?1:0);
+  return o;
+}
+
+function rgbHSV(r,g,b){ const mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn; let h=0;
+  if (d>0){ if (mx===r) h=((g-b)/d)%6; else if (mx===g) h=(b-r)/d+2; else h=(r-g)/d+4; h*=60; if(h<0)h+=360; }
+  return [h, mx>0?d/mx:0, mx/255]; }
+const hueDist = (a,b) => Math.abs(((a-b)%360+540)%360-180);
+
+const GRID_N = 1040, GRID_C = 0.5;   // repère cible : ±260 mm par cellules de 0,5 mm
+function detectHoles(rawOnly){
+  const cal = getCal(), img = state.img; if (!cal || !img) return [];
+  const prevGrid = !rawOnly && state.curSeries > 0 ? state.prevGrid : null;
+  const cal_mm = calMm(), nShots = Math.round(+$("fShots").value) || 0;
+  const s = Math.min(1, 3.5/cal.pxmm);                 // ~3,5 px/mm de travail
+  const W = Math.max(1,Math.round(img.width*s)), H = Math.max(1,Math.round(img.height*s));
+  const c = document.createElement("canvas"); c.width=W; c.height=H;
+  const cx2 = c.getContext("2d", {willReadFrequently:true}); cx2.drawImage(img,0,0,W,H);
+  const rgba = cx2.getImageData(0,0,W,H).data;
+  const pm = cal.pxmm*s, Mi = cal.Mi, ccx = cal.cx*s, ccy = cal.cy*s;
+  const colN = Math.max(Math.hypot(cal.M[0],cal.M[2]), Math.hypot(cal.M[1],cal.M[3]))*s;
+  const Rpx = MAX_R*colN*1.05;
+  const x0=Math.max(0,Math.floor(ccx-Rpx)), x1=Math.min(W-1,Math.ceil(ccx+Rpx));
+  const y0=Math.max(0,Math.floor(ccy-Rpx)), y1=Math.min(H-1,Math.ceil(ccy+Rpx));
+  const bw=x1-x0+1, bh=y1-y0+1; if (bw<4||bh<4) return [];
+  const N = bw*bh, rr = new Float32Array(N), UX = new Float32Array(N), UY = new Float32Array(N);
+  const gv = new Uint8Array(N), hue = new Float32Array(N), sat = new Float32Array(N), val = new Float32Array(N);
+  for (let y=0;y<bh;y++) for (let x=0;x<bw;x++){
+    const i=y*bw+x, j=((y+y0)*W + x+x0)*4, R=rgba[j], G=rgba[j+1], B=rgba[j+2];
+    gv[i] = (R*77+G*150+B*29)>>8; const h = rgbHSV(R,G,B); hue[i]=h[0]; sat[i]=h[1]; val[i]=h[2];
+    const dx=(x+x0+0.5)/s-cal.cx, dy=(y+y0+0.5)/s-cal.cy;
+    UX[i]=Mi[0]*dx+Mi[1]*dy; UY[i]=Mi[2]*dx+Mi[3]*dy; rr[i]=Math.hypot(UX[i],UY[i]);
+  }
+  // 1) couleur des trous : fond vu à travers le carton (bois, tapis…)
+  let holeHue = state.holeHue;
+  if (holeHue == null){
+    const hh = new Float64Array(72); let nc = 0;
+    for (let i=0;i<N;i++) if (rr[i]<255 && sat[i]>0.4 && val[i]>0.2 && val[i]<0.95){ hh[Math.floor(hue[i]/5)%72]++; nc++; }
+    if (nc > 8*Math.PI*(cal_mm/2*pm)**2*0.3){        // assez de pixels colorés pour parler de trous
+      let bi=0, bv=-1; for (let b=0;b<72;b++){ const v=hh[(b+71)%72]+hh[b]+hh[(b+1)%72]; if (v>bv){bv=v;bi=b;} }
+      holeHue = bi*5+2.5;
+    }
+  }
+  state.holeHueUsed = holeHue;
+  let mask = new Uint8Array(N), kk;
+  if (holeHue != null){
+    state.detectMode = "couleur";
+    for (let i=0;i<N;i++) mask[i] = (rr[i]<255 && sat[i]>0.36 && val[i]>0.12 && val[i]<0.8 && hueDist(hue[i],holeHue)<22) ? 1 : 0;
+    kk = Math.max(1, Math.round(0.75*pm));
+  } else {
+    state.detectMode = "contraste";
+    // fond modélisé : 10 / noir / beige × cellules 40 mm, + bandes fines aux bords du 10 et du visuel
+    const GRID=14, EB=12, ES=8, NB=3*GRID*GRID, NK = NB + 2*EB*ES;
+    const key = new Int16Array(N).fill(-1);
+    const hist = new Uint32Array(NK*64), cnt = new Uint32Array(NK), chist = new Uint32Array(3*64), ccnt=[0,0,0];
+    for (let i=0;i<N;i++){
+      const r=rr[i]; if (r > MAX_R) continue; const v=gv[i]; let k;
+      const d1 = r - R_BLACK, d0 = r - ZONE_W;
+      if (Math.abs(d1) < 3 || Math.abs(d0) < 3){ const e = Math.abs(d1)<3 ? 1 : 0, d = e ? d1 : d0;
+        const eb=Math.min(EB-1,Math.floor((d+3)/0.5)); const sec = e ? Math.floor((Math.atan2(UY[i],UX[i])+Math.PI)/(2*Math.PI)*ES)%ES : 0; // bord du 10 : anneau entier, sinon un trou domine la case
+        k = NB + e*EB*ES + eb*ES + sec; }
+      else { const cls = d0<0 ? 0 : d1<0 ? 1 : 2;
+        const cxg=Math.min(GRID-1,Math.max(0,Math.floor((UX[i]+280)/40))), cyg=Math.min(GRID-1,Math.max(0,Math.floor((UY[i]+280)/40)));
+        k = cls*GRID*GRID + cyg*GRID + cxg; chist[cls*64+(v>>2)]++; ccnt[cls]++; }
+      key[i]=k; hist[k*64+(v>>2)]++; cnt[k]++;
+    }
+    const medH = (h, off, tot) => { let acc=0; const half=tot/2; for (let b=0;b<64;b++){ acc+=h[off+b]; if (acc>=half) return b*4+2; } return 128; };
+    const gMed = [0,1,2].map(c => ccnt[c] ? medH(chist, c*64, ccnt[c]) : [40,40,200][c]);
+    const med = new Float32Array(NK), minCnt = Math.max(60, 25*pm*pm);
+    for (let k=0;k<NK;k++){
+      if (cnt[k] && (cnt[k] >= minCnt || k >= NB)) med[k] = medH(hist, k*64, cnt[k]);
+      else med[k] = gMed[Math.min(2, Math.floor(k/(GRID*GRID)))];
+    }
+    const ad = new Uint8Array(N), dh = new Uint32Array(256); let nIn=0;
+    for (let i=0;i<N;i++){ if (key[i]<0) continue; const v=Math.min(255,Math.abs(gv[i]-med[key[i]])); ad[i]=v; dh[v]++; nIn++; }
+    let acc=0, mad=0; for (let v=0;v<256;v++){ acc+=dh[v]; if (acc>=nIn/2){ mad=v; break; } }
+    const T = Math.max(32, 6*mad + 12);
+    for (let i=0;i<N;i++) mask[i] = (key[i]>=0 && rr[i]<255 && ad[i]>T) ? 1 : 0;
+    // fermeture : recolle un trou coupé par un anneau imprimé (sur l'anneau, le fond de référence est clair)
+    const kc = Math.max(1, Math.round(0.6*pm));
+    mask = morph(morph(mask, bw, bh, kc, false), bw, bh, kc, true);
+    kk = Math.max(1, Math.round(0.28*cal_mm*pm));
+  }
+  // 2) ouverture : efface traits de crayon, anneaux, chiffres
+  let opened = morph(morph(mask, bw, bh, kk, true), bw, bh, kk, false);
+  // masque des trous reporté dans le repère de la cible (sert à comparer deux photos)
+  const grid = new Uint8Array(GRID_N*GRID_N), cellOf = new Int32Array(N).fill(-1);
+  for (let i=0;i<N;i++){ const gx=Math.floor((UX[i]+260)/GRID_C), gy=Math.floor((UY[i]+260)/GRID_C);
+    if (gx>=0&&gy>=0&&gx<GRID_N&&gy<GRID_N){ cellOf[i]=gy*GRID_N+gx; if (opened[i]) grid[cellOf[i]]=1; } }
+  state.curGrid = grid;
+  if (rawOnly) return [];
+  if (prevGrid){ // série suivante : on retire tout ce qui était déjà troué sur la photo précédente
+    const excl = morph(prevGrid, GRID_N, GRID_N, 2, false);
+    for (let i=0;i<N;i++) if (opened[i] && cellOf[i]>=0 && excl[cellOf[i]]) opened[i]=0;
+    const k2 = Math.max(1, Math.round(0.6*pm));
+    opened = morph(morph(opened, bw, bh, k2, true), bw, bh, k2, false);
+  }
+  const {comps} = components(opened, bw, bh);
+  // 3) aire d'un trou isolé, mesurée sur la cible elle-même
+  const minA = 4*pm*pm;
+  let blobs = comps.filter(cp => cp.area >= minA);
+  const areas = blobs.map(b=>b.area).sort((a,b)=>a-b);
+  let a1 = areas.length ? Math.max(minA*1.5, areas[Math.floor((areas.length-1)*0.4)]) : Math.PI*(cal_mm/2*pm)**2;
+  if (prevGrid && state.a1mm) a1 = state.a1mm*pm*pm;          // aire d'un trou apprise sur la 1re photo
+  else if (!prevGrid && areas.length >= 3) state.a1mm = a1/(pm*pm);
+  blobs = blobs.filter(b => b.area >= 0.35*a1);
+  // 4) nombre d'impacts par trou : proportionnel à l'aire, ou réparti pour atteindre le nombre de coups tirés
+  const tear = holeHue != null ? 1.6 : 1;   // un carton déchiré montre plus de fond qu'un trou net
+  blobs.forEach(b => { b.t = b.area/a1; b.n = nShots ? 1 : Math.max(1, Math.round(b.t/tear)); });
+  if (nShots > blobs.length){
+    let rest = nShots - blobs.length;
+    while (rest-- > 0){ let bi=0, bv=-1e9; blobs.forEach((b,i)=>{ const v = b.t - b.n; if (v>bv){bv=v;bi=i;} }); blobs[bi].n++; }
+  }
+  const holes=[];
+  for (const cp of blobs){
+    const n = Math.min(40, cp.n), pts = cp.px.map(k => [k%bw, (k/bw)|0]);
+    const centers = n===1 ? [centroid(pts)] : kmeans(pts, n);
+    for (const [px,py] of centers) holes.push({x:(px+x0+0.5)/s, y:(py+y0+0.5)/s, split:n>1});
+  }
+  // trous de la pince du porte-cible : paire symétrique en haut du carton, hors du visuel
+  const mmH = holes.map(h => imgToMm(cal, h.x, h.y)), drop = new Set();
+  for (let i=0;i<mmH.length;i++) for (let j=i+1;j<mmH.length;j++){
+    const a=mmH[i], b=mmH[j];
+    if (a.y>170 && b.y>170 && Math.abs(a.y-b.y)<15 && Math.abs(a.x+b.x)<20 && Math.abs(a.x)>40){ drop.add(i); drop.add(j); }
+  }
+  if (drop.size){ const kept = holes.filter((h,i)=>!drop.has(i)); state.lastDetect = {blobs: blobs.length, total: kept.length, clips: drop.size}; return kept; }
+  state.lastDetect = {blobs: blobs.length, total: holes.length};
+  return holes;
+}
+function centroid(pts){ let x=0,y=0; for(const p of pts){x+=p[0];y+=p[1];} return [x/pts.length, y/pts.length]; }
+function kmeans(pts, n){
+  const C=[pts[0].slice()];
+  while (C.length<n){ let bi=0, bd=-1;
+    for (let i=0;i<pts.length;i+=2){ let md=1e18; for (const c of C){ const d=(pts[i][0]-c[0])**2+(pts[i][1]-c[1])**2; if(d<md)md=d; } if (md>bd){bd=md;bi=i;} }
+    C.push(pts[bi].slice()); }
+  for (let it=0;it<12;it++){
+    const sx=new Float64Array(n), sy=new Float64Array(n), sc=new Float64Array(n);
+    for (const p of pts){ let bi=0, bd=1e18; for (let j=0;j<n;j++){ const d=(p[0]-C[j][0])**2+(p[1]-C[j][1])**2; if(d<bd){bd=d;bi=j;} } sx[bi]+=p[0]; sy[bi]+=p[1]; sc[bi]++; }
+    for (let j=0;j<n;j++) if (sc[j]) C[j]=[sx[j]/sc[j], sy[j]/sc[j]];
+  }
+  return C;
+}
+
+// ---------- séries ----------
+const SERIES_C = ["#22D3EE","#FACC15","#F472B6","#A3E635","#FB923C","#E5E7EB","#60A5FA","#C084FC"];
+const serColor = s => SERIES_C[(s||0) % SERIES_C.length];
+function detectAndMerge(){
+  const old = state.holes.filter(h => (h.s||0) < state.curSeries);
+  return old.concat(detectHoles().map(h => ({...h, s: state.curSeries})));
+}
+function prepareNextSeries(){
+  const cal = getCal(); if (!cal || !state.img) return false;
+  detectHoles(true);
+  const G = GRID_N, grid = state.curGrid.slice(), rc = Math.ceil((calMm()/2 + 0.5)/GRID_C);
+  currentShots().forEach(p => { const cx = Math.floor((p.x+260)/GRID_C), cy = Math.floor((-p.y+260)/GRID_C);
+    for (let dy=-rc;dy<=rc;dy++) for (let dx=-rc;dx<=rc;dx++){ if (dx*dx+dy*dy > rc*rc) continue;
+      const x=cx+dx, y=cy+dy; if (x>=0&&y>=0&&x<G&&y<G) grid[y*G+x]=1; } });
+  const pts = []; let tot = 0; for (let i=0;i<grid.length;i++) if (grid[i]) tot++;
+  const stride = Math.max(1, Math.floor(tot/3000)); let k = 0;
+  for (let i=0;i<grid.length;i++) if (grid[i] && (k++ % stride === 0)) pts.push([(i%G + 0.5)*GRID_C - 260, (Math.floor(i/G) + 0.5)*GRID_C - 260]);
+  state.prevGrid = grid; state.prevPts = pts;
+  state.carry = state.holes.map(h => ({mm: imgToMm(cal, h.x, h.y), s: h.s||0, split: h.split}));
+  state.curSeries = state.holes.reduce((m,h)=>Math.max(m, h.s||0), state.curSeries) + 1;
+  return true;
+}
+// recale la nouvelle photo sur la précédente (petite rotation et décalage) grâce aux trous déjà présents
+function alignToPrev(){
+  const pts = state.prevPts, g = state.curGrid; if (!pts || !pts.length || !g) return;
+  const G = GRID_N, look = (x,y) => { const gx=Math.floor((x+260)/GRID_C), gy=Math.floor((y+260)/GRID_C); return (gx>=0&&gy>=0&&gx<G&&gy<G) ? g[gy*G+gx] : 0; };
+  const score = (th, tx, ty) => { const c=Math.cos(th), sn=Math.sin(th); let n=0; for (const [x,y] of pts) n += look(c*x - sn*y + tx, sn*x + c*y + ty); return n; };
+  const s0 = score(0,0,0); let best = {v:s0, th:0, tx:0, ty:0};
+  for (let d=-5; d<=5; d+=0.5) for (let tx=-4; tx<=4; tx+=0.5) for (let ty=-4; ty<=4; ty+=0.5){
+    const v = score(d*Math.PI/180, tx, ty); if (v > best.v) best = {v, th:d*Math.PI/180, tx, ty}; }
+  const b0 = {...best};
+  for (let d=-0.5; d<=0.5; d+=0.1) for (let tx=-0.5; tx<=0.5; tx+=0.25) for (let ty=-0.5; ty<=0.5; ty+=0.25){
+    const th = b0.th + d*Math.PI/180, v = score(th, b0.tx+tx, b0.ty+ty); if (v > best.v) best = {v, th, tx:b0.tx+tx, ty:b0.ty+ty}; }
+  state.lastAlign = {rot: best.th*180/Math.PI, tx: best.tx, ty: best.ty, gain: s0 ? best.v/s0 : 0};
+  if (best.v < s0*1.05 + 5) return;
+  const cal = getCal(), [a,b,c,d] = cal.M, co = Math.cos(best.th), sn = Math.sin(best.th);
+  const cx = cal.cx + a*best.tx + b*best.ty, cy = cal.cy + c*best.tx + d*best.ty;
+  state.handles = handlesFrom(cx, cy, [a*co + b*sn, -a*sn + b*co, c*co + d*sn, -c*sn + d*co]);
+}
+
+// ---------- exemple synthétique ----------
+function makeSample(opt={}){
+  const W=1400, H=1500, ppm=opt.ppm||2.4, c=document.createElement("canvas"); c.width=W; c.height=H;
+  const x=c.getContext("2d");
+  const bg=x.createLinearGradient(0,0,W,H); bg.addColorStop(0,"#5f6366"); bg.addColorStop(1,"#4a4d50");
+  x.fillStyle=bg; x.fillRect(0,0,W,H);
+  x.save(); x.translate(705+(opt.dx||0),760+(opt.dy||0)); x.rotate(opt.rot!=null?opt.rot:0.018); x.scale(ppm, ppm*0.955);
+  x.fillStyle="#E3D8C0"; x.fillRect(-262,-262,524,524);
+  x.fillStyle="#7c7f81";                             // impacts : fond gris vu à travers le carton
+  const holes = opt.holes || [[2,4],[-11,9],[17,-7],[-5,-16],[9,22],[-23,-4],[28,15],[-9,31],[36,-21],[1,-3],[58,-44],[-41,63],[13,-2],[19,2]];
+  x.fillStyle="#161616"; x.beginPath(); x.arc(0,0,R_BLACK,0,Math.PI*2); x.fill();
+  for (let k=1;k<=10;k++){ const R=(11-k)*ZONE_W; x.beginPath(); x.arc(0,0,R,0,Math.PI*2);
+    x.lineWidth=0.8; x.strokeStyle = R>R_BLACK ? "#1a1a1a" : "#cfc6b2"; if (R!==R_BLACK) x.stroke(); }
+  x.beginPath(); x.arc(0,0,R_X,0,Math.PI*2); x.strokeStyle="#cfc6b2"; x.lineWidth=0.6; x.stroke();
+  x.font="600 10px Arial"; x.textAlign="center"; x.textBaseline="middle";
+  for (let k=1;k<=9;k++){ const p=(11-k)*ZONE_W-ZONE_W/2; x.fillStyle = p<R_BLACK ? "#d8cfbb" : "#1a1a1a";
+    for (const [a,b] of [[p,0],[-p,0],[0,p],[0,-p]]) x.fillText(String(k),a,b); }
+  x.fillStyle="#1a1a1a"; x.font="600 9px Arial"; x.textAlign="left"; x.fillText("C 50", -250, -250);
+  for (const [hx,hy] of holes){ x.beginPath(); x.arc(hx,-hy,4.5,0,Math.PI*2); x.fillStyle=opt.holeC||"#7d8083"; x.fill();
+    x.lineWidth=0.7; x.strokeStyle="rgba(150,140,125,.8)"; x.stroke(); }
+  x.restore();
+  const lg=x.createRadialGradient(350,300,50,700,750,1100); lg.addColorStop(0,"rgba(255,255,240,.10)"); lg.addColorStop(1,"rgba(0,0,0,.14)");
+  x.fillStyle=lg; x.fillRect(0,0,W,H);
+  const id=x.getImageData(0,0,W,H), d=id.data; let seed=7;
+  for (let i=0;i<d.length;i+=4){ seed=(seed*16807)%2147483647; const n=(seed/2147483647-0.5)*14; d[i]+=n; d[i+1]+=n; d[i+2]+=n; }
+  x.putImageData(id,0,0);
+  return c;
+}
+
+// ---------- canvas / vue ----------
+const cv = $("cv"), ctx = cv.getContext("2d"), stage = $("stage");
+let dpr = 1;
+function resize(){
+  dpr = window.devicePixelRatio || 1;
+  const r = stage.getBoundingClientRect();
+  cv.width = Math.round(r.width*dpr); cv.height = Math.round(r.height*dpr);
+  render();
+}
+function fit(){
+  if (!state.img) return;
+  const r = stage.getBoundingClientRect(), cal = getCal();
+  let bx=0, by=0, bw=state.img.width, bh=state.img.height;
+  if (cal){ // cadre sur la carte (±260 mm)
+    const pts = [[-265,-265],[265,-265],[265,265],[-265,265]].map(([a,b])=>mmToImg(cal,a,b));
+    const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y);
+    bx=Math.max(0,Math.min(...xs)); by=Math.max(0,Math.min(...ys));
+    bw=Math.min(state.img.width,Math.max(...xs))-bx; bh=Math.min(state.img.height,Math.max(...ys))-by;
+  }
+  const s = Math.min(r.width/bw, r.height/bh)*0.96;
+  state.view = {s, ox: r.width/2 - (bx+bw/2)*s, oy: r.height/2 - (by+bh/2)*s};
+  render();
+}
+function zoomAt(f, sx, sy){
+  const v = state.view, ns = Math.max(0.02, Math.min(40, v.s*f));
+  v.ox = sx - (sx - v.ox)*ns/v.s; v.oy = sy - (sy - v.oy)*ns/v.s; v.s = ns; render();
+}
+const toScreen = p => ({x: p.x*state.view.s + state.view.ox, y: p.y*state.view.s + state.view.oy});
+const toImg = (sx, sy) => ({x: (sx-state.view.ox)/state.view.s, y: (sy-state.view.oy)/state.view.s});
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function currentShots(){
+  const cal = getCal(); if (!cal) return [];
+  return state.holes.map(h => imgToMm(cal, h.x, h.y));
+}
+
+function render(){
+  ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cv.width,cv.height);
+  if (!state.img) return;
+  const v = state.view;
+  ctx.setTransform(dpr*v.s,0,0,dpr*v.s,dpr*v.ox,dpr*v.oy);
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(state.img, 0, 0);
+  const cal = getCal(); if (!cal) return;
+  const acc = "#FF6B2C", calC = "rgba(255,214,10,.9)";
+  const cal_mm = calMm();
+  // anneaux de référence dans le repère cible
+  ctx.save(); ctx.transform(cal.M[0], cal.M[2], cal.M[1], cal.M[3], cal.cx, cal.cy);
+  const lw = 1/(v.s*cal.pxmm);
+  const showRings = state.mode === "calib";
+  ctx.strokeStyle = calC;
+  for (let k=1;k<=10;k++){ const R=(11-k)*ZONE_W; if (!showRings && R!==R_BLACK && R!==ZONE_W) continue;
+    ctx.beginPath(); ctx.arc(0,0,R,0,Math.PI*2); ctx.lineWidth = (R===R_BLACK?1.6:0.8)*lw; ctx.setLineDash(R===R_BLACK?[]:[4*lw,4*lw]); ctx.stroke(); }
+  ctx.setLineDash([]);
+  // impacts
+  const shots = currentShots(), st = computeStats(shots, cal_mm, +$("fDist").value);
+  ctx.lineWidth = 2*lw;
+  state.holes.forEach((h,i) => { const u = shots[i]; ctx.beginPath(); ctx.arc(u.x, -u.y, cal_mm/2, 0, Math.PI*2);
+    ctx.strokeStyle = serColor(h.s); ctx.setLineDash(h.split?[4*lw,3*lw]:[]); ctx.stroke(); });
+  ctx.setLineDash([]);
+  const fa = analyzeFliers(shots, cal_mm, +$("fDist").value, $("fHand").value);
+  if (st.n >= 2 && st.esI != null){ // écart : segment entre les deux impacts les plus éloignés
+    const a = shots[st.esI], b = shots[st.esJ];
+    ctx.beginPath(); ctx.moveTo(a.x,-a.y); ctx.lineTo(b.x,-b.y); ctx.strokeStyle="rgba(255,255,255,.85)"; ctx.lineWidth=1.2*lw; ctx.setLineDash([3*lw,3*lw]); ctx.stroke(); ctx.setLineDash([]);
+  }
+  if (fa){
+    ctx.beginPath(); ctx.arc(fa.core.mx, -fa.core.my, fa.lim, 0, Math.PI*2); ctx.strokeStyle="rgba(255,80,80,.55)"; ctx.lineWidth=1*lw; ctx.setLineDash([2*lw,4*lw]); ctx.stroke(); ctx.setLineDash([]);
+    fa.fliers.forEach(f => { const p = shots[f.i];
+      ctx.beginPath(); ctx.moveTo(fa.core.mx,-fa.core.my); ctx.lineTo(p.x,-p.y); ctx.strokeStyle="#FF5050"; ctx.lineWidth=1.5*lw; ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x,-p.y, cal_mm/2+1.2, 0, Math.PI*2); ctx.lineWidth=2.5*lw; ctx.stroke(); });
+  }
+  if (st.n >= 2){ // ellipse 1σ et PMI
+    ctx.beginPath(); ctx.ellipse(st.mx, -st.my, st.sdx, st.sdy, 0, 0, Math.PI*2);
+    ctx.strokeStyle = acc; ctx.lineWidth = 1.5*lw; ctx.setLineDash([6*lw,4*lw]); ctx.stroke(); ctx.setLineDash([]);
+  }
+  ctx.restore();
+  // repères en espace écran
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.font = "600 11px 'IBM Plex Mono', monospace"; ctx.textAlign="center"; ctx.textBaseline="middle";
+  state.holes.forEach((h,i) => { const p = toScreen(h), rr = Math.max(7, cal_mm/2*cal.pxmm*v.s);
+    ctx.fillStyle="rgba(0,0,0,.65)"; ctx.fillRect(p.x+rr+1, p.y-rr-8, 18, 14);
+    ctx.fillStyle=serColor(h.s); ctx.fillText(String(i+1), p.x+rr+10, p.y-rr-1); });
+  if (st.n >= 1){ const p = toScreen(mmToImg(cal, st.mx, st.my));
+    ctx.strokeStyle=acc; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(p.x-10,p.y); ctx.lineTo(p.x+10,p.y); ctx.moveTo(p.x,p.y-10); ctx.lineTo(p.x,p.y+10); ctx.stroke(); }
+  const c0 = toScreen({x:cal.cx, y:cal.cy});
+  ctx.strokeStyle=calC; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(c0.x-6,c0.y); ctx.lineTo(c0.x+6,c0.y); ctx.moveTo(c0.x,c0.y-6); ctx.lineTo(c0.x,c0.y+6); ctx.stroke();
+  if (state.mode === "calib"){
+    for (const k of ["t","r","b","l"]){ const p = toScreen(state.handles[k]);
+      ctx.fillStyle="rgba(0,0,0,.5)"; ctx.fillRect(p.x-9,p.y-9,18,18);
+      ctx.strokeStyle=calC; ctx.lineWidth=2; ctx.strokeRect(p.x-8,p.y-8,16,16); }
+  }
+}
+
+// ---------- interactions ----------
+const ptrs = new Map(); let gesture = null;
+function pos(e){ const r = cv.getBoundingClientRect(); return {x: e.clientX-r.left, y: e.clientY-r.top}; }
+function pushUndo(){ state.undo.push(JSON.stringify({holes:state.holes, handles:state.handles})); if (state.undo.length>60) state.undo.shift(); $("bUndo").disabled=false; }
+function nearestHole(p, maxD){
+  let bi=-1, bd=maxD; state.holes.forEach((h,i)=>{ const s=toScreen(h), d=Math.hypot(s.x-p.x,s.y-p.y); if(d<bd){bd=d;bi=i;} }); return bi;
+}
+function holeHitR(){ const cal=getCal(); return Math.max(18, cal ? calMm()/2*cal.pxmm*state.view.s + 6 : 18); }
+cv.addEventListener("pointerdown", e => {
+  if (!state.img) return; cv.setPointerCapture(e.pointerId);
+  const p = pos(e); ptrs.set(e.pointerId, p);
+  if (ptrs.size === 2){
+    const [a,b] = [...ptrs.values()];
+    gesture = {type:"pinch", d0: Math.hypot(a.x-b.x,a.y-b.y), m0:{x:(a.x+b.x)/2,y:(a.y+b.y)/2}, v0:{...state.view}};
+    return;
+  }
+  gesture = {type:"pan", start:p, last:p, moved:false, t:Date.now()};
+  if (state.mode === "calib"){
+    for (const k of ["t","r","b","l"]){ const s = toScreen(state.handles[k]); if (Math.hypot(s.x-p.x,s.y-p.y) < 22){ pushUndo(); gesture = {type:"handle", k, start:p, moved:false}; break; } }
+  } else if (state.mode === "move"){
+    const i = nearestHole(p, holeHitR()); if (i>=0){ pushUndo(); gesture = {type:"hole", i, start:p, moved:false}; }
+  }
+});
+cv.addEventListener("pointermove", e => {
+  if (!ptrs.has(e.pointerId) || !gesture) return;
+  const p = pos(e); ptrs.set(e.pointerId, p);
+  if (gesture.type === "pinch" && ptrs.size >= 2){
+    const [a,b] = [...ptrs.values()], d = Math.hypot(a.x-b.x,a.y-b.y), m = {x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+    const v0 = gesture.v0, ns = Math.max(0.02, Math.min(40, v0.s*d/gesture.d0));
+    const ix = (gesture.m0.x - v0.ox)/v0.s, iy = (gesture.m0.y - v0.oy)/v0.s;
+    state.view = {s:ns, ox: m.x - ix*ns, oy: m.y - iy*ns}; render(); return;
+  }
+  if (Math.hypot(p.x-gesture.start.x, p.y-gesture.start.y) > 6) gesture.moved = true;
+  if (gesture.type === "pan" && gesture.moved){ state.view.ox += p.x-gesture.last.x; state.view.oy += p.y-gesture.last.y; gesture.last = p; render(); }
+  else if (gesture.type === "handle"){ state.handles[gesture.k] = toImg(p.x, p.y); render(); }
+  else if (gesture.type === "hole" && gesture.moved){ const q = toImg(p.x,p.y); state.holes[gesture.i] = {x:q.x, y:q.y, s:state.holes[gesture.i].s||0}; render(); }
+  if (gesture.type === "pan") gesture.last = p;
+});
+function endPtr(e){
+  if (!ptrs.has(e.pointerId)) return;
+  const p = pos(e); ptrs.delete(e.pointerId);
+  if (!gesture) return;
+  if (gesture.type === "pinch"){ if (ptrs.size === 0) gesture = null; return; }
+  const g = gesture; gesture = null;
+  if (g.type === "handle" || g.type === "hole"){ if (!g.moved) state.undo.pop(); refresh(); return; }
+  if (g.type === "pan" && !g.moved){
+    const q = toImg(p.x, p.y);
+    if (state.mode === "add"){ pushUndo(); state.holes.push({x:q.x, y:q.y, s:state.curSeries}); refresh(); }
+    else if (state.mode === "pick"){ sampleHue(q); }
+    else if (state.mode === "del"){ const i = nearestHole(p, holeHitR()); if (i>=0){ pushUndo(); state.holes.splice(i,1); refresh(); } }
+  }
+}
+cv.addEventListener("pointerup", endPtr); cv.addEventListener("pointercancel", endPtr);
+cv.addEventListener("wheel", e => { e.preventDefault(); const p = pos(e); zoomAt(Math.exp(-e.deltaY*0.0015), p.x, p.y); }, {passive:false});
+$("zin").onclick = () => { const r=stage.getBoundingClientRect(); zoomAt(1.4, r.width/2, r.height/2); };
+$("zout").onclick = () => { const r=stage.getBoundingClientRect(); zoomAt(1/1.4, r.width/2, r.height/2); };
+$("zfit").onclick = fit;
+
+const HINTS = {
+  calib: "<b>Calibrer :</b> fais glisser les 4 carrés jaunes sur le bord du visuel noir (haut, droite, bas, gauche). Les anneaux jaunes doivent recouvrir ceux de la cible.",
+  add: "<b>Ajouter :</b> touche le centre d'un trou oublié. Pince ou molette pour zoomer, glisse pour te déplacer.",
+  del: "<b>Supprimer :</b> touche un cercle bleu pour retirer une fausse détection.",
+  move: "<b>Déplacer :</b> fais glisser un cercle bleu pour le recentrer sur son trou.",
+  pick: "<b>Couleur des trous :</b> touche l'intérieur d'un trou, là où l'on voit le fond (bois, tapis…). La détection sera relancée avec cette couleur."
+};
+function setMode(m){
+  state.mode = m;
+  document.querySelectorAll("#modes button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode===m));
+  $("hint").innerHTML = HINTS[m]; render();
+}
+document.querySelectorAll("#modes button").forEach(b => b.onclick = () => setMode(b.dataset.mode));
+
+function sampleHue(q){
+  const cal = getCal(); if (!cal) return;
+  const rad = Math.max(3, 2.5*cal.pxmm), x0 = Math.max(0, Math.round(q.x-rad)), y0 = Math.max(0, Math.round(q.y-rad));
+  const w = Math.min(state.img.width-x0, Math.round(2*rad)), h = Math.min(state.img.height-y0, Math.round(2*rad));
+  if (w<1||h<1) return;
+  const d = state.img.getContext("2d").getImageData(x0,y0,w,h).data; let sx=0, sy=0, n=0;
+  for (let j=0;j<d.length;j+=4){ const [hh,ss,vv] = rgbHSV(d[j],d[j+1],d[j+2]); if (ss>0.25 && vv>0.1 && vv<0.9){ sx+=Math.cos(hh*Math.PI/180)*ss; sy+=Math.sin(hh*Math.PI/180)*ss; n++; } }
+  if (n < 5){ $("hint").innerHTML = "<b>Pas de couleur nette ici.</b> Touche le centre d'un trou où le fond est bien visible, ou passe en détection par contraste (fond gris ou blanc)."; return; }
+  state.holeHue = ((Math.atan2(sy,sx)*180/Math.PI)+360)%360;
+  pushUndo(); state.holes = detectAndMerge(); setMode("add"); refresh();
+}
+$("bPick").onclick = () => { if (state.mode === "pick") setMode("add"); else setMode("pick"); };
+$("fShots").addEventListener("change", () => { if (!state.img) return; pushUndo(); state.holes = detectAndMerge(); refresh(); });
+$("bUndo").onclick = () => { const s = state.undo.pop(); if (s){ const o = JSON.parse(s); state.holes=o.holes; state.handles=o.handles; } $("bUndo").disabled = !state.undo.length; refresh(); };
+$("bClear").onclick = () => { if (!state.holes.length) return; pushUndo(); state.holes = []; refresh(); };
+$("bDetect").onclick = () => { pushUndo(); state.holes = detectAndMerge(); refresh(); };
+$("bAutoCal").onclick = () => { pushUndo(); const ok = autoCalib(); if (!ok) setMode("calib"); fit(); refresh(); };
+
+function loadFile(file, next){
+  if (!file) return;
+  const url = URL.createObjectURL(file), im = new Image();
+  im.onload = () => {
+    const MAXS = 2600, s = Math.min(1, MAXS/Math.max(im.naturalWidth, im.naturalHeight));
+    const c = document.createElement("canvas"); c.width = Math.round(im.naturalWidth*s); c.height = Math.round(im.naturalHeight*s);
+    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+    setImage(c, false, next);
+  };
+  im.onerror = () => { $("hint").innerHTML = "<b>Image illisible.</b> Essaie un JPEG ou un PNG."; };
+  im.src = url;
+}
+$("fileCam").onchange = e => { loadFile(e.target.files[0]); e.target.value=""; };
+$("fileGal").onchange = e => { loadFile(e.target.files[0]); e.target.value=""; };
+$("fileNext").onchange = e => { const f = e.target.files[0]; e.target.value=""; if (!f) return;
+  if (!prepareNextSeries()){ loadFile(f); return; } loadFile(f, true); };
+stage.addEventListener("dragover", e => e.preventDefault());
+stage.addEventListener("drop", e => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); });
+
+function setImage(canvas, isSample, next){
+  state.img = canvas; state.sample = isSample; state.undo = []; $("bUndo").disabled = true;
+  if (!next){ state.curSeries = 0; state.prevGrid = null; state.prevPts = null; state.carry = null; state.a1mm = null; state.holeHue = null; state.lastAlign = null; }
+  $("badge").hidden = !isSample && !next;
+  $("badge").textContent = isSample ? "Exemple · importe ta photo" : `Série ${state.curSeries+1}`;
+  const ok = autoCalib();
+  if (next && ok){ detectHoles(true); alignToPrev(); }
+  const calN = getCal();
+  const old = next && state.carry && calN ? state.carry.map(c => { const p = mmToImg(calN, c.mm.x, c.mm.y); return {x:p.x, y:p.y, s:c.s, split:c.split}; }) : [];
+  state.holes = old.concat(detectHoles().map(h => ({...h, s: state.curSeries})));
+  fit(); setMode(ok ? "add" : "calib");
+  if (!ok) $("hint").innerHTML = "<b>Visuel noir non trouvé automatiquement.</b> " + HINTS.calib;
+  refresh();
+}
+
+// ---------- panneau résultats ----------
+function renderSeries(shots, sers, cal_mm, dist, card, body, msgEl){
+  const ks = [...new Set(sers)].sort((a,b)=>a-b);
+  if (ks.length < 2){ card.hidden = true; return; }
+  card.hidden = false;
+  const rows = ks.map(k => { const sh = shots.filter((p,i)=>sers[i]===k); return {k, st: computeStats(sh, cal_mm, dist)}; });
+  body.innerHTML = rows.map(({k,st}) => `<tr><td><span class="sw" style="background:${serColor(k)}"></span> ${k+1}</td><td>${st.n}</td><td>${st.total}</td><td>${st.n?fmt(st.avg,2):"–"}</td><td>${fmt(st.sdr,1)}</td><td>${sgn(st.mx,0)}</td><td>${sgn(st.my,0)}</td></tr>`).join("");
+  const f = rows[0].st, l = rows[rows.length-1].st;
+  if (msgEl && f.n && l.n){
+    const d = l.avg - f.avg;
+    msgEl.className = "msg"; msgEl.textContent = Math.abs(d) < 0.25 ? `Niveau stable entre la 1re et la dernière série (${fmt(f.avg,2)} → ${fmt(l.avg,2)} pts/coup).`
+      : d < 0 ? `Baisse de ${fmt(-d,2)} pt/coup entre la 1re et la dernière série : piste fatigue ou concentration.` : `Progression de ${fmt(d,2)} pt/coup de la 1re à la dernière série : l'échauffement compte.`;
+  }
+}
+function refresh(){
+  render();
+  const cal_mm = calMm(), dist = +$("fDist").value;
+  const shots = currentShots(), st = computeStats(shots, cal_mm, dist);
+  const ld = state.lastDetect, nS = Math.round(+$("fShots").value)||0;
+  let info = (state.curSeries ? `Série ${state.curSeries+1} · ` : "") + st.n + (st.n>1?" impacts":" impact");
+  if (ld) info += ` · ${ld.blobs} trous · ${state.detectMode}`;
+  if (nS && st.n !== nS) info += ` · ${st.n>nS?"+":""}${st.n-nS} vs annoncé`;
+  $("nInfo").textContent = info;
+  $("hueSw").style.background = state.detectMode==="couleur" && state.holeHueUsed!=null ? `hsl(${state.holeHueUsed} 55% 45%)` : "transparent";
+  $("sTot").textContent = st.total; $("sOf").textContent = "/ " + st.n*10;
+  $("sDec").textContent = st.n ? fmt(st.dec,1) : "–";
+  $("sAvg").textContent = st.n ? fmt(st.avg,2) : "–";
+  $("sX").textContent = st.n ? st.x : "–";
+  const rows = [
+    ["PMI horizontal", st.mx, true], ["PMI vertical", st.my, true], ["Décalage PMI", st.off],
+    ["Écart-type H", st.sdx], ["Écart-type V", st.sdy], ["Écart-type radial", st.sdr], ["↳ fourchette 95 %", st.sdrCI, false, true],
+    ["Rayon moyen", st.mr], ["Groupement", st.es]
+  ];
+  $("dispBody").innerHTML = rows.map(([l,v,signed,ci]) => {
+    if (ci){ const r = (a,b,d) => a==null ? "–" : `${fmt(a,d)}–${fmt(b,d)}`;
+      return `<tr><td class="muted">${l}</td><td>${v?r(v[0],v[1],0):"–"}</td><td>${v?r(st.toMoa(v[0]),st.toMoa(v[1]),1):"–"}</td><td>${v?r(st.toMrad(v[0]),st.toMrad(v[1]),2):"–"}</td></tr>`; }
+    const f = signed ? sgn : fmt;
+    return `<tr><td>${l}</td><td>${f(v,1)}</td><td>${st.n?f(st.toMoa?.(v),2):"–"}</td><td>${st.n?f(st.toMrad?.(v),2):"–"}</td></tr>`;
+  }).join("");
+  // correction de visée : sur le cœur du groupement (sans les coups écartés)
+  const corr = $("corr");
+  if (st.n >= 1){
+    const faC = analyzeFliers(shots, cal_mm, dist, $("fHand").value);
+    const base = faC && faC.fliers.length ? faC.core : st;
+    const cv_ = +$("fClick").value, unit = $("fUnit").value;
+    const ang = v => unit==="moa" ? st.toMoa(v) : st.toMrad(v);
+    // un décalage inférieur à 2 erreurs-types n'est pas distinguable du hasard
+    const signif = (m, sd) => base.n >= 3 && sd ? Math.abs(m) > 2*sd/Math.sqrt(base.n) : true;
+    const part = (v, sd, pos, neg) => {
+      if (!signif(v, sd)) return `pas de correction ${pos==="à droite"?"horizontale":"verticale"} (${fmt(Math.abs(v),0)} mm, dans le bruit)`;
+      const dir = v>0 ? neg : pos, mm = Math.abs(v);
+      let t = `${fmt(mm,0)} mm ${dir}`;
+      if (cv_ > 0 && dist > 0) t += ` · <b>${Math.round(Math.abs(ang(v))/cv_)} clics</b>`;
+      return t;
+    };
+    corr.innerHTML = `Réglage de la hausse${faC && faC.fliers.length ? ` (calculé sans ${faC.fliers.length>1?"les "+faC.fliers.length+" coups écartés":"le coup écarté"})` : ""} : ${part(base.mx, base.sdx, "à droite","à gauche")}, ${part(base.my, base.sdy, "vers le haut","vers le bas")}.`;
+    corr.hidden = false;
+  } else corr.hidden = true;
+  const fa = analyzeFliers(shots, cal_mm, dist, $("fHand").value);
+  const fb = $("flyBox");
+  if (!fa) fb.innerHTML = `<p class="muted" style="margin:0">Il faut au moins 5 impacts pour repérer les coups écartés.</p>`;
+  else {
+    let h = fa.fliers.length
+      ? `<ul class="flyl">${fa.fliers.map(f => `<li><b>#${f.i+1}</b><b>${fmt(f.d,0)} mm à ${f.hour} h · ${fmt(f.ratio,1)} σ</b><span>${f.label}</span></li>`).join("")}</ul>`
+      : `<p style="margin:0">Aucun coup écarté : tous les impacts sont dans ${fmt(fa.lim,0)} mm autour du cœur du groupement.</p>`;
+    if (fa.fliers.length){
+      const a = fa.all, c = fa.core;
+      h += `<div class="cmp"><div><span>Groupement</span><strong>${fmt(a.es,0)} → ${fmt(c.es,0)} mm</strong></div><div><span>Écart-type radial</span><strong>${fmt(a.sdr,1)} → ${fmt(c.sdr,1)} mm</strong></div><div><span>Points</span><strong>${a.total} (${fmt(a.avg,2)}/coup)</strong></div><div><span>Sans les écartés</span><strong>${fmt(c.avg,2)}/coup</strong></div></div>`;
+    }
+    if (fa.axis) h += `<div class="axis">Dispersion ${fa.axis.dir} dominante (rapport ${fmt(fa.axis.k,1)}) : ${fa.axis.label}.</div>`;
+    fb.innerHTML = h;
+  }
+  $("shotBody").innerHTML = shots.map((p,i) => { const sc = scoreOf(Math.hypot(p.x,p.y), cal_mm);
+    return `<tr class="${state.holes[i].split?"split":""}${fa&&fa.flags[i]?" fly":""}"><td>${i+1}</td><td>${sgn(p.x)}</td><td>${sgn(p.y)}</td><td>${sc.pts}${sc.x?"<span class='muted'>x</span>":""}</td><td>${fmt(sc.dec,1)}</td></tr>`; }).join("")
+    || `<tr><td colspan="5" class="muted" style="text-align:center;font-family:var(--body)">Aucun impact</td></tr>`;
+  $("bSave").disabled = st.n === 0;
+  renderSeries(shots, state.holes.map(h=>h.s||0), cal_mm, dist, $("serCard"), $("serBody"), $("serMsg"));
+}
+["fCal","fDist","fClick","fUnit","fHand"].forEach(id => $(id).addEventListener("input", () => { saveSettings(); refresh(); }));
+$("fArme").addEventListener("input", () => { saveSettings(); markPreset(); });
+["fMun","fPos"].forEach(id => $(id).addEventListener("change", saveSettings));
+
+const PRESETS = {
+  p320: {arme:"P320 X-Five Legion", cal:"9.0", dist:25, click:"", unit:"mrad"},
+  wm:   {arme:"Bergara Wilderness Thumbhole", cal:"7.82", dist:100, click:"", unit:"mrad"},
+  blk:  {arme:"Daniel Defense DDM4 300S", cal:"7.82|blk", dist:50, click:"", unit:"mrad"}
+};
+function markPreset(){ document.querySelectorAll("#presets .chip").forEach(b => b.setAttribute("aria-pressed", PRESETS[b.dataset.p].arme === $("fArme").value)); }
+document.querySelectorAll("#presets .chip").forEach(b => b.onclick = () => {
+  const p = PRESETS[b.dataset.p]; $("fArme").value=p.arme; $("fCal").value=p.cal; $("fDist").value=p.dist; $("fClick").value=p.click; $("fUnit").value=p.unit;
+  saveSettings(); markPreset(); refresh();
+});
+function saveSettings(){ ls.set("c50_settings", {mun:$("fMun").value, pos:$("fPos").value, hand:$("fHand").value, arme:$("fArme").value, cal:$("fCal").value, dist:$("fDist").value, click:$("fClick").value, unit:$("fUnit").value}); }
+function loadSettings(){
+  const s = ls.get("c50_settings", PRESETS.p320);
+  $("fHand").value = s.hand||"droitier"; $("fMun").value = s.mun||""; if (s.pos) $("fPos").value = s.pos; $("fArme").value = s.arme||""; $("fCal").value = s.cal||"9.0"; $("fDist").value = s.dist||25; $("fClick").value = s.click||""; $("fUnit").value = s.unit||"mrad";
+  markPreset();
+}
+const today = () => { const d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+
+// ---------- historique ----------
+let store = {kind:"pending", sessions:[]};
+function setSync(kind, txt){ const el=$("sync"); el.className = "sync " + kind; $("syncTxt").textContent = txt; }
+async function initStore(){
+  let db = null;
+  try { if (window.claude && typeof window.claude.use === "function") db = await window.claude.use("db"); } catch(e){ db = null; }
+  if (db){
+    store = {kind:"db", db, sessions:[]};
+    setSync("ok", "Historique synchronisé");
+    db.collection("seances").onSnapshot(snap => {
+      store.sessions = snap.docs.filter(d=>d.exists).map(d => ({id:d.id, ...d.data()}));
+      renderHistory();
+    }, err => { setSync("local", "Synchro interrompue"); });
+  } else {
+    store = {kind:"local", sessions: ls.get("c50_seances", [])};
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil");
+    renderHistory();
+  }
+}
+async function saveSession(){
+  const cal_mm = calMm(), dist = +$("fDist").value, shots = currentShots();
+  if (!shots.length) return;
+  const calLabel = $("fCal").selectedOptions[0].textContent.split(" · ")[0];
+  const doc = {
+    v:1, date: $("fDate").value || today(), createdAt: Date.now(),
+    arme: $("fArme").value.trim() || "Sans nom", calibre: calLabel, caliberMm: cal_mm, distanceM: dist,
+    clickVal: +$("fClick").value || null, clickUnit: $("fUnit").value, note: $("fNote").value.trim(),
+    mun: $("fMun").value.trim(), pos: $("fPos").value, v0: +$("fV0").value || null, vsd: +$("fVsd").value || null,
+    series: state.holes.reduce((m,h)=>Math.max(m,(h.s||0)+1), 1),
+    shots: shots.map((p,i) => [Math.round(p.x*10)/10, Math.round(p.y*10)/10, state.holes[i].s||0])
+  };
+  const msg = $("saveMsg"); msg.className = "msg"; msg.textContent = "Enregistrement…";
+  try {
+    if (store.kind === "db"){
+      const id = doc.date.replace(/-/g,"") + "-" + Math.random().toString(36).slice(2,8);
+      await store.db.collection("seances").doc(id).set(doc);
+    } else {
+      doc.id = "l" + doc.createdAt; store.sessions.push(doc); ls.set("c50_seances", store.sessions); renderHistory();
+    }
+    msg.className = "msg ok"; msg.textContent = `Séance enregistrée : ${shots.length} impacts, ${computeStats(doc.shots.map(([x,y])=>({x,y})), cal_mm, dist).total} points.`;
+    $("fNote").value = "";
+  } catch(e){
+    msg.className = "msg err";
+    msg.textContent = e && e.code === "quota_exceeded" ? "Historique plein : supprime d'anciennes séances puis réessaie." : "Échec de l'enregistrement. Vérifie ta connexion et réessaie.";
+  }
+}
+$("bSave").onclick = saveSession;
+
+function sessionStats(s){ const st = computeStats(s.shots.map(([x,y])=>({x,y})), s.caliberMm, s.distanceM); st.s = s; return st; }
+let selectedId = null, confirmDel = false;
+function fillSelect(el, values, label){
+  const cur = el.value; el.innerHTML = `<option value="">${label}</option>` + values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  if (values.map(String).includes(cur)) el.value = cur;
+}
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+function filtered(){
+  const a = $("hArme").value, d = $("hDist").value, m = $("hMun").value;
+  return store.sessions.filter(s => (!a || s.arme===a) && (!d || String(s.distanceM)===d) && (!m || (s.mun||"")===m))
+    .sort((x,y) => (x.date+String(x.createdAt)).localeCompare(y.date+String(y.createdAt)));
+}
+function renderHistory(){
+  const armes = [...new Set(store.sessions.map(s=>s.arme))].sort();
+  const dists = [...new Set(store.sessions.map(s=>s.distanceM))].sort((a,b)=>a-b).map(String);
+  fillSelect($("hArme"), armes, "Toutes"); fillSelect($("hDist"), dists, "Toutes");
+  const muns = [...new Set(store.sessions.map(s=>s.mun||"").filter(Boolean))].sort();
+  fillSelect($("hMun"), muns, "Toutes");
+  $("munList").innerHTML = muns.map(m=>`<option value="${esc(m)}">`).join("");
+  $("armeList").innerHTML = [...new Set([...armes, ...Object.values(PRESETS).map(p=>p.arme)])].map(a=>`<option value="${esc(a)}">`).join("");
+  const list = filtered().map(sessionStats);
+  // résumé
+  const tot = list.reduce((a,s)=>a+s.n,0);
+  const avgSdr = mean(list.filter(s=>s.sdr!=null).map(s=>s.sdr));
+  const avgAvg = mean(list.filter(s=>s.n).map(s=>s.avg));
+  const best = list.filter(s=>s.sdr!=null).reduce((b,s)=> !b||s.sdr<b.sdr ? s : b, null);
+  $("hsum").innerHTML = `
+    <div><span>Séances</span><strong>${list.length}</strong></div>
+    <div><span>Coups tirés</span><strong>${tot}</strong></div>
+    <div><span>Moy./coup</span><strong>${avgAvg==null?"–":fmt(avgAvg,2)}</strong></div>
+    <div><span>Meilleur <i class="sg">σ</i>R</span><strong>${best?fmt(best.sdr,1)+" mm":"–"}</strong></div>`;
+  drawChart(list);
+  renderCompare(list);
+  $("histBody").innerHTML = list.slice().reverse().map(st => { const s = st.s;
+    return `<tr data-id="${esc(s.id)}" aria-selected="${s.id===selectedId}"><td>${fmtDate(s.date)}</td><td>${esc(s.arme)}</td><td>${esc(s.mun||"–")}</td><td>${s.distanceM} m</td><td>${st.n}</td><td>${st.total}</td><td>${st.n?fmt(st.avg,2):"–"}</td><td>${fmt(st.sdx,1)}</td><td>${fmt(st.sdy,1)}</td><td>${fmt(st.sdr,1)}</td><td>${fmt(st.toMoa(st.sdr),2)}</td><td>${fmt(st.off,1)}</td><td>${(()=>{const f=analyzeFliers(s.shots.map(([x,y])=>({x,y})), s.caliberMm, s.distanceM, $("fHand").value); return f?f.fliers.length:"–";})()}</td></tr>`;
+  }).join("") || `<tr><td colspan="13" class="empty" style="font-family:var(--body)">Aucune séance enregistrée pour ce filtre. Analyse une cible puis « Enregistrer dans l'historique ».</td></tr>`;
+  document.querySelectorAll("#histBody tr[data-id]").forEach(tr => tr.onclick = () => { selectedId = selectedId===tr.dataset.id ? null : tr.dataset.id; confirmDel=false; renderHistory(); });
+  renderDetail();
+}
+// comparaison des munitions : écart-type radial mis en commun, en MOA pour mélanger les distances
+function pooledByMun(list){
+  const g = new Map();
+  list.forEach(st => { const s = st.s, k = s.mun || "(non renseignée)"; if (st.n < 2 || !(s.distanceM > 0)) return;
+    const f = 1/s.distanceM*MOA_PER_MRAD, e = g.get(k) || {mun:k, sessions:0, n:0, ssx:0, ssy:0, df:0, pts:0};
+    e.sessions++; e.n += st.n; e.pts += st.total; e.df += st.n-1; e.ssx += (st.n-1)*(st.sdx*f)**2; e.ssy += (st.n-1)*(st.sdy*f)**2; g.set(k, e); });
+  return [...g.values()].map(e => { const sd = Math.sqrt(e.ssx/e.df + e.ssy/e.df); return {...e, sd, ci: sigmaCI(sd, 2*e.df), avg: e.pts/e.n}; }).sort((a,b)=>a.sd-b.sd);
+}
+function renderCompare(list){
+  const box = $("cmpBox"), rows = pooledByMun(list);
+  if (rows.length < 2){ box.innerHTML = ""; return; }
+  const best = rows[0];
+  box.innerHTML = `<div style="padding:0 12px 12px"><h2 style="font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.08em;text-transform:uppercase;margin:4px 0 8px;color:var(--ink-2)">Comparer les munitions</h2>
+    <div class="tablewrap"><table class="hist" style="cursor:default"><thead><tr><th>Munition</th><th>Séances</th><th>Coups</th><th><i class="sg">σ</i>R MOA</th><th>Fourchette 95 %</th><th>Moy./coup</th><th>Verdict</th></tr></thead><tbody>
+    ${rows.map((r,i) => { const worse = i>0 && r.ci && best.ci && r.ci[0] > best.ci[1];
+      const verdict = i===0 ? "la plus précise" : worse ? "nettement moins précise" : "pas de différence démontrée";
+      return `<tr style="cursor:default"><td style="font-family:var(--body)">${esc(r.mun)}</td><td>${r.sessions}</td><td>${r.n}</td><td>${fmt(r.sd,2)}</td><td>${r.ci?fmt(r.ci[0],2)+"–"+fmt(r.ci[1],2):"–"}</td><td>${fmt(r.avg,2)}</td><td style="font-family:var(--body);color:${worse?"var(--crit)":i===0?"var(--good)":"var(--ink-2)"}">${verdict}</td></tr>`; }).join("")}
+    </tbody></table></div>
+    <p class="note">Écart-type radial mis en commun sur toutes les séances de chaque munition, converti en MOA pour comparer des distances différentes. « Pas de différence démontrée » veut dire que les fourchettes se chevauchent : tire davantage avant de conclure.</p></div>`;
+}
+const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
+const fmtDate = d => { const [y,m,j] = String(d).split("-"); return j ? `${j}/${m}/${y}` : d; };
+["hArme","hDist","hMun","hMetric"].forEach(id => $(id).addEventListener("change", () => { ls.set("c50_hmetric", $("hMetric").value); renderHistory(); }));
+
+const METRICS = {
+  sdr:    {get:s=>s.sdr, ci:s=>s.sdrCI, unit:"mm", d:1},
+  sdrMoa: {get:s=>s.toMoa(s.sdr), ci:s=>s.sdrCI && [s.toMoa(s.sdrCI[0]), s.toMoa(s.sdrCI[1])], unit:"MOA", d:2},
+  avg:    {get:s=>s.n?s.avg:null, unit:"pts", d:2},
+  off:    {get:s=>s.n?s.off:null, unit:"mm", d:1},
+  es:     {get:s=>s.es, unit:"mm", d:1}
+};
+function niceTicks(lo, hi, n=4){
+  if (lo===hi){ lo -= 1; hi += 1; }
+  const step0 = (hi-lo)/n, mag = 10**Math.floor(Math.log10(step0)), f = step0/mag;
+  const step = (f<1.5?1:f<3?2:f<7?5:10)*mag, a = Math.floor(lo/step)*step, b = Math.ceil(hi/step)*step, t=[];
+  for (let v=a; v<=b+step/2; v+=step) t.push(+v.toFixed(10)); return t;
+}
+function drawChart(list){
+  const svg = $("chart"), m = METRICS[$("hMetric").value];
+  const pts = list.map(s => ({v:m.get(s), ci: m.ci ? m.ci(s) : null, s})).filter(p => p.v!=null && isFinite(p.v));
+  const W=720, H=240, L=48, R=16, T=14, B=34;
+  if (pts.length < 2){
+    svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--muted)" font-size="14" font-family="IBM Plex Sans, sans-serif">${pts.length?"Encore une séance pour tracer l'évolution.":"Les séances enregistrées apparaîtront ici."}</text>`;
+    return;
+  }
+  const vals = pts.flatMap(p => p.ci ? [p.v, p.ci[0], p.ci[1]] : [p.v]), ticks = niceTicks(Math.min(...vals), Math.max(...vals));
+  const y0 = ticks[0], y1 = ticks[ticks.length-1];
+  const X = i => L + (W-L-R) * (pts.length===1 ? .5 : i/(pts.length-1));
+  const Y = v => T + (H-T-B) * (1 - (v-y0)/(y1-y0));
+  let h = "";
+  ticks.forEach(t => { h += `<line x1="${L}" x2="${W-R}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--line)" stroke-width="1"/>`;
+    h += `<text x="${L-8}" y="${Y(t)}" text-anchor="end" dominant-baseline="middle" fill="var(--muted)" font-size="11" font-family="IBM Plex Mono, monospace">${fmt(t, m.d>1&&y1-y0<2?2:(y1-y0<10?1:0))}</text>`; });
+  const every = Math.max(1, Math.ceil(pts.length/7));
+  pts.forEach((p,i) => { if (i%every===0 || i===pts.length-1) h += `<text x="${X(i)}" y="${H-12}" text-anchor="middle" fill="var(--muted)" font-size="11" font-family="IBM Plex Mono, monospace">${fmtDate(p.s.s.date).slice(0,5)}</text>`; });
+  const line = pts.map((p,i)=>`${i?"L":"M"}${X(i).toFixed(1)},${Y(p.v).toFixed(1)}`).join("");
+  h += `<path d="${line} L${X(pts.length-1)},${Y(y0)} L${X(0)},${Y(y0)} Z" fill="var(--accent)" opacity=".10"/>`;
+  h += `<path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  pts.forEach((p,i) => { if (!p.ci) return; const x = X(i);
+    h += `<line x1="${x}" x2="${x}" y1="${Y(p.ci[0])}" y2="${Y(p.ci[1])}" stroke="var(--accent)" stroke-width="1.5" opacity=".45"/><line x1="${x-4}" x2="${x+4}" y1="${Y(p.ci[0])}" y2="${Y(p.ci[0])}" stroke="var(--accent)" stroke-width="1.5" opacity=".45"/><line x1="${x-4}" x2="${x+4}" y1="${Y(p.ci[1])}" y2="${Y(p.ci[1])}" stroke="var(--accent)" stroke-width="1.5" opacity=".45"/>`; });
+  pts.forEach((p,i) => { const last = i===pts.length-1;
+    h += `<circle cx="${X(i)}" cy="${Y(p.v)}" r="${last?5:3.5}" fill="${last?"var(--accent)":"var(--surface)"}" stroke="var(--accent)" stroke-width="2"/>`; });
+  const lp = pts[pts.length-1];
+  h += `<text x="${X(pts.length-1)-8}" y="${Y(lp.v)-12}" text-anchor="end" fill="var(--ink)" font-size="12" font-weight="600" font-family="IBM Plex Mono, monospace">${fmt(lp.v,m.d)} ${m.unit}</text>`;
+  h += `<line id="xh" x1="0" x2="0" y1="${T}" y2="${H-B}" stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>`;
+  h += `<rect x="${L}" y="0" width="${W-L-R}" height="${H}" fill="transparent" id="hit"/>`;
+  svg.innerHTML = h;
+  const tip = $("tip"), wrap = $("chartWrap");
+  const hit = svg.querySelector("#hit"), xh = svg.querySelector("#xh");
+  hit.onpointermove = e => {
+    const r = svg.getBoundingClientRect(), sx = (e.clientX - r.left) * W / r.width;
+    let bi=0, bd=1e9; pts.forEach((p,i)=>{ const d=Math.abs(X(i)-sx); if(d<bd){bd=d;bi=i;} });
+    const p = pts[bi], px = X(bi)*r.width/W, py = Y(p.v)*r.height/H;
+    xh.setAttribute("x1", X(bi)); xh.setAttribute("x2", X(bi)); xh.setAttribute("visibility","visible");
+    tip.hidden = false; tip.style.left = (px+12)+"px"; tip.style.top = (py+12)+"px";
+    tip.textContent = `${fmtDate(p.s.s.date)} · ${p.s.s.arme}${p.s.s.mun?" · "+p.s.s.mun:""} ${p.s.s.distanceM} m · ${fmt(p.v,m.d)} ${m.unit}${p.ci?` (${fmt(p.ci[0],m.d)}–${fmt(p.ci[1],m.d)})`:""}`;
+  };
+  hit.onpointerleave = () => { tip.hidden = true; xh.setAttribute("visibility","hidden"); };
+}
+
+function plotSVG(st){
+  const s = st.s, cal = s.caliberMm, shots = s.shots.map(([x,y])=>({x,y}));
+  const ext = Math.max(40, ...shots.map(p=>Math.max(Math.abs(p.x),Math.abs(p.y))+cal)) * 1.1;
+  const vb = `${-ext} ${-ext} ${2*ext} ${2*ext}`, sw = ext/150;
+  let h = `<svg viewBox="${vb}" role="img" aria-label="Carte des impacts"><rect x="${-ext}" y="${-ext}" width="${2*ext}" height="${2*ext}" fill="#E3D8C0"/>`;
+  h += `<circle cx="0" cy="0" r="${R_BLACK}" fill="#1b1b1b"/>`;
+  for (let k=1;k<=10;k++){ const R=(11-k)*ZONE_W; if (R>ext*1.5) continue; h += `<circle cx="0" cy="0" r="${R}" fill="none" stroke="${R<=R_BLACK?"#cfc6b2":"#1b1b1b"}" stroke-width="${sw}"/>`; }
+  h += `<circle cx="0" cy="0" r="${R_X}" fill="none" stroke="#cfc6b2" stroke-width="${sw*0.7}"/>`;
+  shots.forEach((p,i) => { const c = serColor(s.shots[i][2]||0); h += `<circle cx="${p.x}" cy="${-p.y}" r="${cal/2}" fill="${c}55" stroke="${c}" stroke-width="${sw*1.5}"/>`; });
+  const fa = analyzeFliers(shots, cal, s.distanceM, "droitier");
+  if (fa) fa.fliers.forEach(f => { const p = shots[f.i]; h += `<line x1="${fa.core.mx}" y1="${-fa.core.my}" x2="${p.x}" y2="${-p.y}" stroke="#E5484D" stroke-width="${sw*1.5}"/><circle cx="${p.x}" cy="${-p.y}" r="${cal/2+1.5}" fill="none" stroke="#E5484D" stroke-width="${sw*2.5}"/>`; });
+  if (st.n>=2) h += `<ellipse cx="${st.mx}" cy="${-st.my}" rx="${st.sdx}" ry="${st.sdy}" fill="none" stroke="#FF6B2C" stroke-width="${sw*1.5}" stroke-dasharray="${sw*4} ${sw*3}"/>`;
+  if (st.n) h += `<path d="M${st.mx-ext/25},${-st.my}h${ext/12.5}M${st.mx},${-st.my-ext/25}v${ext/12.5}" stroke="#FF6B2C" stroke-width="${sw*2.2}"/>`;
+  return h + `</svg>`;
+}
+function renderDetail(){
+  const box = $("detail"), s = store.sessions.find(x=>x.id===selectedId);
+  if (!s){ box.innerHTML = ""; return; }
+  const st = sessionStats(s);
+  box.innerHTML = `<div class="detail"><div>${plotSVG(st)}</div><div>
+    <h2 style="font-family:var(--display);font-weight:600;font-size:20px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.04em">${fmtDate(s.date)} · ${esc(s.arme)} · ${s.distanceM} m</h2>
+    <p class="muted" style="margin:0 0 10px">${esc(s.calibre||"")}${s.mun?` · ${esc(s.mun)}`:""}${s.pos?` · ${esc(s.pos)}`:""} · ${st.n} coups · ${st.total} pts (${fmt(st.dec,1)}) · ${st.x} X${s.v0?` · ${fmt(s.v0,0)} m/s${s.vsd?` (σ ${fmt(s.vsd,1)})`:""}`:""}${s.note?` · ${esc(s.note)}`:""}</p>
+    <table class="disp"><thead><tr><th></th><th>mm</th><th>MOA</th><th>mrad</th></tr></thead><tbody>
+    ${[["PMI H",st.mx,1],["PMI V",st.my,1],["Écart-type H",st.sdx],["Écart-type V",st.sdy],["Écart-type radial",st.sdr],["Groupement",st.es]].map(([l,v,sg])=>{const f=sg?sgn:fmt;return `<tr><td>${l}</td><td>${f(v,1)}</td><td>${f(st.toMoa(v),2)}</td><td>${f(st.toMrad(v),2)}</td></tr>`;}).join("")}
+    </tbody></table>
+    ${st.sdrCI?`<p class="note">Fourchette 95 % de l'écart-type radial : ${fmt(st.sdrCI[0],1)}–${fmt(st.sdrCI[1],1)} mm.</p>`:""}
+    <div id="dSer" hidden style="margin-top:10px"><table class="disp"><thead><tr><th>Série</th><th>Coups</th><th>Pts</th><th>Moy.</th><th><i class="sg">σ</i>R mm</th><th>PMI x</th><th>PMI y</th></tr></thead><tbody id="dSerBody"></tbody></table><div class="msg" id="dSerMsg"></div></div>
+    <div class="row" style="margin-top:12px">${confirmDel
+      ? `<span>Supprimer définitivement cette séance ?</span><button class="btn danger" id="bDelYes">Supprimer</button><button class="btn ghost" id="bDelNo">Garder</button>`
+      : `<button class="btn danger" id="bDel">Supprimer la séance</button>`}</div>
+  </div></div>`;
+  renderSeries(s.shots.map(([x,y])=>({x,y})), s.shots.map(p=>p[2]||0), s.caliberMm, s.distanceM, $("dSer"), $("dSerBody"), $("dSerMsg"));
+  if ($("bDel")) $("bDel").onclick = () => { confirmDel = true; renderDetail(); };
+  if ($("bDelNo")) $("bDelNo").onclick = () => { confirmDel = false; renderDetail(); };
+  if ($("bDelYes")) $("bDelYes").onclick = async () => {
+    try {
+      if (store.kind === "db") await store.db.doc("seances/" + s.id).delete();
+      else { store.sessions = store.sessions.filter(x=>x.id!==s.id); ls.set("c50_seances", store.sessions); }
+      selectedId = null; confirmDel = false; renderHistory();
+    } catch(e){ confirmDel = false; renderDetail(); }
+  };
+}
+
+function buildCSV(){
+  const head = ["date","arme","munition","position","v0_ms","sd_v0_ms","calibre","distance_m","coups","points","decimal","mouches","moy_coup","pmi_x_mm","pmi_y_mm","decalage_mm","sd_h_mm","sd_v_mm","sd_radial_mm","sd_radial_moa","sd_radial_mrad","rayon_moyen_mm","groupement_mm","coups_ecartes","groupement_sans_ecartes_mm","sd_radial_sans_ecartes_mm","note","impacts_mm"];
+  const n = v => v==null||!isFinite(v) ? "" : String(Math.round(v*100)/100).replace(".", ",");
+  const q = v => `"${String(v??"").replace(/"/g,'""')}"`;
+  const rows = filtered().map(sessionStats).map(st => { const s = st.s;
+    return [s.date, q(s.arme), q(s.mun||""), q(s.pos||""), n(s.v0), n(s.vsd), q(s.calibre), s.distanceM, st.n, st.total, n(st.dec), st.x, n(st.avg), n(st.mx), n(st.my), n(st.off), n(st.sdx), n(st.sdy), n(st.sdr), n(st.toMoa(st.sdr)), n(st.toMrad(st.sdr)), n(st.mr), n(st.es), ...(()=>{const f=analyzeFliers(s.shots.map(([x,y])=>({x,y})), s.caliberMm, s.distanceM, "droitier"); return f?[f.fliers.length, n(f.core.es), n(f.core.sdr)]:["","",""];})(), q(s.note), q(s.shots.map(p=>`${p[0]} ${p[1]} s${(p[2]||0)+1}`).join(" | "))].join(";"); });
+  return "﻿" + head.join(";") + "\n" + rows.join("\n");
+}
+// Enregistre un fichier : via Claude dans l'artifact, par un lien de téléchargement dans l'appli autonome
+async function saveFile(filename, data, mime){
+  if (window.claude?.use){
+    let dl = null; try { dl = await window.claude.use("downloads"); } catch(e){}
+    if (dl){ try { await dl.save({filename, data}); $("exportArea").hidden = true; return; } catch(e){ if (e && e.code === "declined") return; } }
+  } else {
+    try { const url = URL.createObjectURL(new Blob([data], {type:mime})), a = document.createElement("a");
+      a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 4000); return; } catch(e){}
+  }
+  $("exportArea").hidden = false; $("exportTxt").value = data; $("exportTxt").select();
+}
+$("bExport").onclick = () => saveFile(`seances-c50-${today()}.csv`, buildCSV(), "text/csv");
+$("bBackup").onclick = () => saveFile(`pointage-c50-sauvegarde-${today()}.json`, JSON.stringify({app:"pointage-c50", v:1, sessions: store.sessions}, null, 1), "application/json");
+$("fRestore").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  let list; try { const o = JSON.parse(await f.text()); list = Array.isArray(o) ? o : o.sessions; } catch(err){ list = null; }
+  const msg = $("restoreMsg");
+  if (!Array.isArray(list)){ msg.className = "msg err"; msg.textContent = "Fichier non reconnu : choisis une sauvegarde .json de Pointage C50."; return; }
+  const have = new Set(store.sessions.map(s=>s.id)); let added = 0;
+  for (const raw of list){
+    if (!raw || !Array.isArray(raw.shots) || !raw.date) continue;
+    const id = String(raw.id || ("r" + (raw.createdAt||Date.now()) + Math.random().toString(36).slice(2,6))).replace(/[^A-Za-z0-9_\-.~:@+]/g, "_");
+    if (have.has(id)) continue;
+    const doc = {...raw}; delete doc.id;
+    try {
+      if (store.kind === "db") await store.db.collection("seances").doc(id).set(doc);
+      else store.sessions.push({...doc, id});
+      have.add(id); added++;
+    } catch(err){ break; }
+  }
+  if (store.kind !== "db"){ ls.set("c50_seances", store.sessions); renderHistory(); }
+  msg.className = "msg ok"; msg.textContent = `${added} séance${added>1?"s":""} ajoutée${added>1?"s":""} (les séances déjà présentes sont ignorées).`;
+};
+
+// ---------- onglets ----------
+function showTab(t){
+  $("tab-an").setAttribute("aria-selected", t==="an"); $("tab-hi").setAttribute("aria-selected", t==="hi");
+  $("view-an").hidden = t!=="an"; $("view-hi").hidden = t!=="hi";
+  if (t==="an") resize(); else renderHistory();
+}
+$("tab-an").onclick = () => showTab("an"); $("tab-hi").onclick = () => showTab("hi");
+if (location.hash === "#historique") showTab("hi");
+
+// ---------- démarrage ----------
+loadSettings();
+$("fDate").value = today();
+$("hMetric").value = ls.get("c50_hmetric", "sdr");
+let lastW = 0;
+new ResizeObserver(() => { if ($("view-an").hidden) return; const w = Math.round(stage.getBoundingClientRect().width); resize(); if (state.img && w !== lastW){ lastW = w; fit(); } }).observe(stage);
+setImage(makeSample(), true);
+window.__c50 = {state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries};
+renderHistory();
+initStore();
+})();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(()=>{}));
+</script>
+</body>
+</html>
