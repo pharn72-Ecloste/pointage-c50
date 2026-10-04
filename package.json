@@ -1,0 +1,11 @@
+{
+  "name": "pointage-c50",
+  "private": true,
+  "description": "Comptage des impacts sur cible C50 (application web autonome). Les dépendances ne servent qu'aux tests.",
+  "scripts": {
+    "test": "node tests/detection.test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.0"
+  }
+}
