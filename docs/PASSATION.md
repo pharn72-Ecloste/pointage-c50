@@ -51,6 +51,15 @@ Dans le blanc du 10, une corolle grise entoure le trou. Dans le noir elle est in
 une couronne de fibres blanches arrachées. Le code n'utilise pas la corolle comme critère, les
 filtres de forme ont suffi sur les photos disponibles.
 
+Deux gros plans annotés par l'utilisateur sont dans `docs/zooms/` :
+
+- `trou-9mm-noir-10.35mm.jpg` : impact dans le visuel noir, avec sa couronne de fibres blanches.
+- `trou-9mm-blanc-9.41mm.jpg` : impact dans le blanc du 10, avec sa corolle grise.
+
+Ces images ont été agrandies et lissées par un traitement d'image avant d'être transmises. Elles
+montrent l'aspect d'un trou, mais ne servent pas à régler la détection : celle-ci se règle sur les
+photos de cible entière de `tests/photos/`.
+
 ## Ce qui a échoué, et pourquoi
 
 **Détection par contraste simple (v1).** Sur les vraies cibles, le 10 blanc était pris pour un
