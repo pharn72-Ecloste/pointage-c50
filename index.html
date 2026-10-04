@@ -150,6 +150,11 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
 .exportbox{width:100%;height:140px;font:12px var(--mono);border:1px solid var(--line-2);border-radius:6px;padding:8px;background:var(--surface-2);color:var(--ink)}
 .sw{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--line-2);background:transparent}
 .sg{font-style:normal;text-transform:none}
+.addser{font-size:12px;color:var(--ink-2);display:inline-flex;align-items:center;gap:6px}
+.addser select{border:1px solid var(--line-2);border-radius:6px;background:var(--surface);padding:5px 6px}
+.shots td.pt{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+.shots td.pt.forced{color:var(--accent);font-weight:600;text-decoration:none}
+.shots td.pt .jg{color:var(--warn);margin-left:3px}
 .kbd{font-family:var(--mono);font-size:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:0 4px}
 @media (prefers-reduced-motion:no-preference){.btn,.chip,.tab{transition:background .15s,border-color .15s}}
 </style>
@@ -180,6 +185,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
             <button data-mode="del" aria-pressed="false">Supprimer</button>
             <button data-mode="move" aria-pressed="false">Déplacer</button>
           </div>
+          <label class="addser" id="addSerWrap" hidden>Ajout en <select id="fAddSer"></select></label>
         </div>
         <div class="stage" id="stage">
           <canvas id="cv"></canvas>
@@ -193,7 +199,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
         <div class="toolbar" style="border-top:1px solid var(--line);border-bottom:0">
           <button class="btn" id="bAutoCal">Recaler le visuel</button>
           <button class="btn" id="bDetect">Détecter les impacts</button>
-          <button class="btn ghost" id="bPick" title="Toucher ensuite l'intérieur d'un trou">Couleur des trous <span id="hueSw" class="sw"></span></button>
+          <button class="btn ghost" id="bPick" title="En secours : touche l'intérieur d'un trou pour chercher sa couleur"><span id="pickTxt">Trou modèle</span> <span id="hueSw" class="sw"></span></button>
           <label class="btn" for="fileNext" id="bNext" title="Photographie la même cible après la série suivante">+ Photo série suivante</label>
           <input id="fileNext" type="file" accept="image/*" hidden>
           <button class="btn ghost" id="bUndo" disabled>Annuler</button>
@@ -231,7 +237,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
             <div class="field"><label for="fUnit">Unité du clic</label>
               <select id="fUnit"><option value="mrad">mrad</option><option value="moa">MOA</option></select></div>
           </div>
-          <p class="note">Indique le nombre de coups tirés depuis la photo précédente : les trous qui se chevauchent sont découpés pour retrouver ce total. En séries, photographie la cible après chaque série avec « + Photo série suivante » : seuls les nouveaux trous sont comptés.</p>
+          <p class="note">Indique le nombre de coups tirés depuis la photo précédente. Un trou nettement plus grand que la normale est découpé en plusieurs impacts ; un coup passé entièrement dans un trou existant est signalé comme non localisé, pas inventé. En séries, photographie la cible après chaque série avec « + Photo série suivante » : seuls les nouveaux trous sont comptés.</p>
         </div>
 
         <div class="card sec">
@@ -242,6 +248,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
             <div><span>Moy./coup</span><strong id="sAvg">–</strong></div>
             <div><span>Mouches (X)</span><strong id="sX">–</strong></div>
           </div>
+          <div class="msg" id="missMsg"></div>
         </div>
 
         <div class="card sec" id="serCard" hidden>
@@ -268,8 +275,8 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
 
         <div class="card sec">
           <h2>Impacts</h2>
-          <div class="shots"><table><thead><tr><th>#</th><th>x mm</th><th>y mm</th><th>pts</th><th>déc.</th></tr></thead><tbody id="shotBody"></tbody></table></div>
-          <p class="note">◌ = impact séparé d'un trou groupé : vérifie-le sur l'image.</p>
+          <div class="shots"><table><thead><tr><th>#</th><th>Série</th><th>Position</th><th>x mm</th><th>y mm</th><th>pts</th><th>déc.</th></tr></thead><tbody id="shotBody"></tbody></table></div>
+          <p class="note">◌ = impact séparé d'un trou groupé : vérifie-le sur l'image. ≈ = le trou est à moins de 0,4 mm d'un cordon : c'est à la jauge de trancher. Touche les points d'un impact pour les corriger (✎).</p>
         </div>
 
         <div class="card sec">
@@ -364,10 +371,19 @@ function scoreOf(rmm, cal){
 // Intervalle de confiance à 95 % d'un écart-type (loi du χ², approximation de Wilson-Hilferty)
 function chi2q(df, z){ const a = 2/(9*df); return df*Math.pow(1 - a + z*Math.sqrt(a), 3); }
 function sigmaCI(sd, df){ if (!(df>=2) || sd==null) return null; return [sd*Math.sqrt(df/chi2q(df, 1.959964)), sd*Math.sqrt(df/chi2q(df, -1.959964))]; }
+// Points d'un impact : calculés, sauf si le tireur les a corrigés à la jauge (p.o).
+// near = distance en mm entre le bord du trou et le cordon le plus proche : en dessous de 0,4 mm, le calcul ne tranche pas.
+function scoreShot(p, cal){
+  const r = Math.hypot(p.x, p.y), a = scoreOf(r, cal), sEdge = r - cal/2;
+  const near = sEdge > 0 && sEdge < 10*ZONE_W + 1 ? Math.abs(sEdge - ZONE_W*Math.round(sEdge/ZONE_W)) : 99;
+  if (p.o == null) return {...a, auto:a.pts, near, forced:false};
+  return {pts:p.o, dec: p.o > a.pts ? p.o : Math.min(10.9, p.o + 0.9), x: p.o === 10 && a.x, auto:a.pts, near, forced:true};
+}
+const toPts = sh => sh.map(([x,y,sr,o]) => o != null ? {x, y, o} : {x, y});
 function computeStats(shots, cal, dist){
   const n = shots.length;
   const out = {n, total:0, dec:0, x:0};
-  shots.forEach(p => { const sc = scoreOf(Math.hypot(p.x,p.y), cal); out.total += sc.pts; out.dec += sc.dec; if (sc.x) out.x++; });
+  shots.forEach(p => { const sc = scoreShot(p, cal); out.total += sc.pts; out.dec += sc.dec; if (sc.x) out.x++; });
   if (!n) return out;
   const mx = shots.reduce((a,p)=>a+p.x,0)/n, my = shots.reduce((a,p)=>a+p.y,0)/n;
   out.mx = mx; out.my = my; out.off = Math.hypot(mx,my); out.avg = out.total/n;
@@ -428,10 +444,16 @@ function getCal(){
   const a = (h.r.x-h.l.x)/(2*R_BLACK), c = (h.r.y-h.l.y)/(2*R_BLACK);  // colonne x-mm
   const b = (h.b.x-h.t.x)/(2*R_BLACK), d = (h.b.y-h.t.y)/(2*R_BLACK);  // colonne y-mm (vers le bas)
   const det = a*d - b*c; if (Math.abs(det) < 1e-9) return null;
-  return {cx, cy, M:[a,b,c,d], Mi:[d/det, -b/det, -c/det, a/det], pxmm: Math.sqrt(Math.abs(det))};
+  // Perspective : une photo prise de biais décale le centre apparent des anneaux d'autant plus qu'ils sont grands.
+  // Modèle : p = c0 + M·u / (1 + w·u). Les poignées donnent l'ellipse du visuel noir (centre chx, chy) ;
+  // le vrai centre de la cible est c0 = ch + M·(R²/2)·w.
+  const w = state.persp || [0,0], k2 = R_BLACK*R_BLACK/2;
+  const c0x = cx + (a*w[0] + b*w[1])*k2, c0y = cy + (c*w[0] + d*w[1])*k2;
+  return {cx:c0x, cy:c0y, chx:cx, chy:cy, w, M:[a,b,c,d], Mi:[d/det, -b/det, -c/det, a/det], pxmm: Math.sqrt(Math.abs(det))};
 }
-function imgToMm(cal, x, y){ const dx=x-cal.cx, dy=y-cal.cy, m=cal.Mi; return {x: m[0]*dx+m[1]*dy, y: -(m[2]*dx+m[3]*dy)}; }
-function mmToImg(cal, x, y){ const m=cal.M, yd=-y; return {x: cal.cx + m[0]*x + m[1]*yd, y: cal.cy + m[2]*x + m[3]*yd}; }
+function imgToU(cal, x, y){ const dx=x-cal.cx, dy=y-cal.cy, m=cal.Mi, qx=m[0]*dx+m[1]*dy, qy=m[2]*dx+m[3]*dy, f=1/(1 - cal.w[0]*qx - cal.w[1]*qy); return [qx*f, qy*f]; }
+function imgToMm(cal, x, y){ const u = imgToU(cal, x, y); return {x:u[0], y:-u[1]}; }
+function mmToImg(cal, x, y){ const m=cal.M, yd=-y, f=1/(1 + cal.w[0]*x + cal.w[1]*yd); return {x: cal.cx + (m[0]*x + m[1]*yd)*f, y: cal.cy + (m[2]*x + m[3]*yd)*f}; }
 function handlesFrom(cx, cy, M){ // M = [a,b,c,d] px/mm
   const p = (ux,uy) => ({x: cx + M[0]*ux + M[1]*uy, y: cy + M[2]*ux + M[3]*uy});
   return {t:p(0,-R_BLACK), r:p(R_BLACK,0), b:p(0,R_BLACK), l:p(-R_BLACK,0)};
@@ -514,6 +536,69 @@ function autoCalib(){
   return true;
 }
 
+// Affine le calage sur les anneaux imprimés : cordons blancs du 9 (r = 50) et du 8 (r = 75), bord du visuel (r = 100).
+// Le décalage de leurs centres apparents (proportionnel à r²) donne la perspective et le vrai centre.
+function refineCalib(){
+  state.persp = [0,0];
+  const cal = getCal(), img = state.img; if (!cal || !img) return null;
+  const W = img.width, H = img.height;
+  const g = grayOf(img.getContext("2d", {willReadFrequently:true}), W, H);
+  const at = (x,y) => { const xi = Math.round(x), yi = Math.round(y); return (xi<0||yi<0||xi>=W||yi>=H) ? -1 : g[yi*W+xi]; };
+  const meas = [];
+  for (const [R, type] of [[50,"line"],[75,"line"],[100,"edge"]]){
+    const pts = [];
+    for (let a=0; a<360; a+=1.5){
+      const th = a*Math.PI/180, co = Math.cos(th), sn = Math.sin(th), prof = [];
+      let ok = true;
+      for (let r=R-6; r<=R+6.001; r+=0.2){ const p = mmToImg(cal, r*co, -r*sn), v = at(p.x, p.y); if (v<0){ ok=false; break; } prof.push(v); }
+      if (!ok) continue;
+      if (type === "line"){
+        const srt = prof.slice().sort((x,y)=>x-y), base = srt[srt.length>>1]; let mx=-1, mi=0;
+        prof.forEach((v,i)=>{ if (v>mx){mx=v;mi=i;} });
+        if (mx - base < 28) continue;
+        const half = base + 0.5*(mx-base); let sw=0, sr=0, i0=mi, i1=mi;
+        while (i0>0 && prof[i0-1]>half) i0--; while (i1<prof.length-1 && prof[i1+1]>half) i1++;
+        if ((i1-i0)*0.2 > 2.2) continue;                         // trop large pour un cordon : chiffre ou fibres arrachées
+        for (let i=i0;i<=i1;i++){ const wv = prof[i]-half; sw += wv; sr += wv*(R-6+i*0.2); }
+        pts.push([th, sr/sw]);
+      } else {
+        let best=0, bi=-1; for (let i=3;i<prof.length-3;i++){ const d = (prof[i+3]+prof[i+2]) - (prof[i-3]+prof[i-2]); if (d>best){best=d;bi=i;} }
+        if (best < 60) continue;
+        pts.push([th, R-6+bi*0.2]);
+      }
+    }
+    if (pts.length < 70) continue;
+    // ajustement robuste de r(θ) = R' + dx·cosθ + dy·sinθ (dy vers le bas)
+    let keep = pts, fit = null;
+    for (let it=0; it<5; it++){
+      let s11=0,s12=0,s13=0,s22=0,s23=0,s33=0,b1=0,b2=0,b3=0;
+      for (const [th,r] of keep){ const c=Math.cos(th), sn=Math.sin(th); s11+=1; s12+=c; s13+=sn; s22+=c*c; s23+=c*sn; s33+=sn*sn; b1+=r; b2+=r*c; b3+=r*sn; }
+      const det = s11*(s22*s33-s23*s23) - s12*(s12*s33-s23*s13) + s13*(s12*s23-s22*s13); if (Math.abs(det)<1e-9) break;
+      const R0 = (b1*(s22*s33-s23*s23) - s12*(b2*s33-s23*b3) + s13*(b2*s23-s22*b3))/det;
+      const dx = (s11*(b2*s33-s23*b3) - b1*(s12*s33-s23*s13) + s13*(s12*b3-b2*s13))/det;
+      const dy = (s11*(s22*b3-b2*s23) - s12*(s12*b3-b2*s13) + b1*(s12*s23-s22*s13))/det;
+      const res = keep.map(([th,r]) => r - R0 - dx*Math.cos(th) - dy*Math.sin(th));
+      const sd = Math.sqrt(res.reduce((a,v)=>a+v*v,0)/res.length), lim = Math.max(0.5, 2.2*sd);
+      fit = {R, R0, dx, dy, n: keep.length, sd};           // (dx, dy) : décalage du centre de l'anneau, y vers le bas
+      const nk = keep.filter((p,i)=>Math.abs(res[i])<=lim); if (nk.length === keep.length || nk.length < 60) break; keep = nk;
+    }
+    if (fit && fit.sd < 1.2) meas.push(fit);
+  }
+  state.calInfo = meas;
+  if (meas.length < 2) return null;
+  // δ(r) = c0' + k·r²  (régression sur r²)
+  const n = meas.length, mr = meas.reduce((a,m)=>a+m.R*m.R,0)/n, mdx = meas.reduce((a,m)=>a+m.dx,0)/n, mdy = meas.reduce((a,m)=>a+m.dy,0)/n;
+  let vr=0, cx_=0, cy_=0; meas.forEach(m => { const q = m.R*m.R - mr; vr += q*q; cx_ += q*(m.dx-mdx); cy_ += q*(m.dy-mdy); });
+  const kx = cx_/vr, ky = cy_/vr, R2 = R_BLACK*R_BLACK;
+  if (Math.hypot(kx,ky)*R2 > 10) return null;                 // perspective invraisemblable : on garde le calage simple
+  const e = [mdx + kx*(R2-mr), mdy + ky*(R2-mr)];             // centre apparent du visuel dans l'ancien repère
+  const ed = meas.find(m => m.R === R_BLACK), sc = ed ? ed.R0/R_BLACK : 1;   // échelle : sur le bord du visuel seulement (un cordon se mesure à son bord extérieur, pas en son milieu)
+  const M = cal.M.map(v => v*sc);
+  state.handles = handlesFrom(cal.chx + cal.M[0]*e[0] + cal.M[1]*e[1], cal.chy + cal.M[2]*e[0] + cal.M[3]*e[1], M);
+  state.persp = [-2*kx, -2*ky];
+  return {shift: Math.hypot(kx,ky)*R2, scale: sc, rings: n};
+}
+
 // ---------- détection des impacts ----------
 function boxSum1D(src, dst, W, H, k, horiz){
   // somme glissante de fenêtre 2k+1 le long d'un axe
@@ -562,32 +647,31 @@ function detectHoles(rawOnly){
   for (let y=0;y<bh;y++) for (let x=0;x<bw;x++){
     const i=y*bw+x, j=((y+y0)*W + x+x0)*4, R=rgba[j], G=rgba[j+1], B=rgba[j+2];
     gv[i] = (R*77+G*150+B*29)>>8; const h = rgbHSV(R,G,B); hue[i]=h[0]; sat[i]=h[1]; val[i]=h[2];
-    const dx=(x+x0+0.5)/s-cal.cx, dy=(y+y0+0.5)/s-cal.cy;
-    UX[i]=Mi[0]*dx+Mi[1]*dy; UY[i]=Mi[2]*dx+Mi[3]*dy; rr[i]=Math.hypot(UX[i],UY[i]);
+    const u = imgToU(cal, (x+x0+0.5)/s, (y+y0+0.5)/s);
+    UX[i]=u[0]; UY[i]=u[1]; rr[i]=Math.hypot(u[0],u[1]);
   }
-  // 1) couleur des trous : fond vu à travers le carton (bois, tapis…)
-  let holeHue = state.holeHue;
-  if (holeHue == null){
-    const hh = new Float64Array(72); let nc = 0;
-    for (let i=0;i<N;i++) if (rr[i]<255 && sat[i]>0.4 && val[i]>0.2 && val[i]<0.95){ hh[Math.floor(hue[i]/5)%72]++; nc++; }
-    if (nc > 8*Math.PI*(cal_mm/2*pm)**2*0.3){        // assez de pixels colorés pour parler de trous
-      let bi=0, bv=-1; for (let b=0;b<72;b++){ const v=hh[(b+71)%72]+hh[b]+hh[(b+1)%72]; if (v>bv){bv=v;bi=b;} }
-      holeHue = bi*5+2.5;
-    }
-  }
+  // 1) masque de « ce qui n'est pas du papier »
+  //    Le carton n'a que deux teintes (clair et noir imprimé). Un trou s'en écarte, quel que soit ce qu'il y a derrière :
+  //    vide sombre du pas de tir, bois d'une table, tapis… On compare chaque pixel à la teinte locale attendue du papier.
+  const holeHue = state.holeHue;          // seulement si l'utilisateur a touché un trou modèle
   state.holeHueUsed = holeHue;
   let mask = new Uint8Array(N), kk;
+  const dark = new Uint8Array(N);          // pixels du vide : là où la balle est réellement passée
+  const gradRef = {T:32};
   if (holeHue != null){
     state.detectMode = "couleur";
     for (let i=0;i<N;i++) mask[i] = (rr[i]<255 && sat[i]>0.36 && val[i]>0.12 && val[i]<0.8 && hueDist(hue[i],holeHue)<22) ? 1 : 0;
     kk = Math.max(1, Math.round(0.75*pm));
   } else {
-    state.detectMode = "contraste";
+    state.detectMode = "forme";
     // fond modélisé : 10 / noir / beige × cellules 40 mm, + bandes fines aux bords du 10 et du visuel
     const GRID=14, EB=12, ES=8, NB=3*GRID*GRID, NK = NB + 2*EB*ES;
-    const key = new Int16Array(N).fill(-1);
-    const hist = new Uint32Array(NK*64), cnt = new Uint32Array(NK), chist = new Uint32Array(3*64), ccnt=[0,0,0];
-    for (let i=0;i<N;i++){
+    const key = new Int16Array(N).fill(-1), c1 = new Uint8Array(N), c2 = new Uint8Array(N);
+    const hist = new Uint32Array(NK*64), h1 = new Uint32Array(NK*64), h2 = new Uint32Array(NK*64), cnt = new Uint32Array(NK);
+    const chist = new Uint32Array(3*64), ch1 = new Uint32Array(3*64), ch2 = new Uint32Array(3*64), ccnt=[0,0,0];
+    for (let y=0;y<bh;y++) for (let x=0;x<bw;x++){
+      const i=y*bw+x, j=((y+y0)*W + x+x0)*4, R=rgba[j], G=rgba[j+1], B=rgba[j+2];
+      c1[i] = Math.max(0, Math.min(255, ((R-G)>>1) + 128)); c2[i] = Math.max(0, Math.min(255, ((2*B-R-G)>>2) + 128));
       const r=rr[i]; if (r > MAX_R) continue; const v=gv[i]; let k;
       const d1 = r - R_BLACK, d0 = r - ZONE_W;
       if (Math.abs(d1) < 3 || Math.abs(d0) < 3){ const e = Math.abs(d1)<3 ? 1 : 0, d = e ? d1 : d0;
@@ -595,25 +679,29 @@ function detectHoles(rawOnly){
         k = NB + e*EB*ES + eb*ES + sec; }
       else { const cls = d0<0 ? 0 : d1<0 ? 1 : 2;
         const cxg=Math.min(GRID-1,Math.max(0,Math.floor((UX[i]+280)/40))), cyg=Math.min(GRID-1,Math.max(0,Math.floor((UY[i]+280)/40)));
-        k = cls*GRID*GRID + cyg*GRID + cxg; chist[cls*64+(v>>2)]++; ccnt[cls]++; }
-      key[i]=k; hist[k*64+(v>>2)]++; cnt[k]++;
+        k = cls*GRID*GRID + cyg*GRID + cxg; chist[cls*64+(v>>2)]++; ch1[cls*64+(c1[i]>>2)]++; ch2[cls*64+(c2[i]>>2)]++; ccnt[cls]++; }
+      key[i]=k; hist[k*64+(v>>2)]++; h1[k*64+(c1[i]>>2)]++; h2[k*64+(c2[i]>>2)]++; cnt[k]++;
     }
     const medH = (h, off, tot) => { let acc=0; const half=tot/2; for (let b=0;b<64;b++){ acc+=h[off+b]; if (acc>=half) return b*4+2; } return 128; };
-    const gMed = [0,1,2].map(c => ccnt[c] ? medH(chist, c*64, ccnt[c]) : [40,40,200][c]);
-    const med = new Float32Array(NK), minCnt = Math.max(60, 25*pm*pm);
+    const gMed = [0,1,2].map(c => ccnt[c] ? [medH(chist,c*64,ccnt[c]), medH(ch1,c*64,ccnt[c]), medH(ch2,c*64,ccnt[c])] : [[40,40,200][c],128,128]);
+    const med = new Float32Array(NK), m1 = new Float32Array(NK), m2 = new Float32Array(NK), minCnt = Math.max(60, 25*pm*pm);
     for (let k=0;k<NK;k++){
-      if (cnt[k] && (cnt[k] >= minCnt || k >= NB)) med[k] = medH(hist, k*64, cnt[k]);
-      else med[k] = gMed[Math.min(2, Math.floor(k/(GRID*GRID)))];
+      if (cnt[k] && (cnt[k] >= minCnt || k >= NB)){ med[k] = medH(hist,k*64,cnt[k]); m1[k] = medH(h1,k*64,cnt[k]); m2[k] = medH(h2,k*64,cnt[k]); }
+      else { const g = gMed[Math.min(2, Math.floor(k/(GRID*GRID)))]; med[k]=g[0]; m1[k]=g[1]; m2[k]=g[2]; }
     }
     const ad = new Uint8Array(N), dh = new Uint32Array(256); let nIn=0;
-    for (let i=0;i<N;i++){ if (key[i]<0) continue; const v=Math.min(255,Math.abs(gv[i]-med[key[i]])); ad[i]=v; dh[v]++; nIn++; }
+    for (let i=0;i<N;i++){ if (key[i]<0) continue; const k=key[i];
+      const dL = gv[i]-med[k], dC = 2*Math.hypot(c1[i]-m1[k], c2[i]-m2[k]);
+      let v = Math.sqrt(dL*dL + 1.4*1.4*dC*dC);
+      if (dL < -18 && gv[i] < 0.6*med[k]){ v = Math.max(v, 255); dark[i] = 1; }     // nettement plus sombre que le papier, même sous une lumière faible
+      v = Math.min(255, v); ad[i]=v; dh[Math.round(v)]++; nIn++; }
     let acc=0, mad=0; for (let v=0;v<256;v++){ acc+=dh[v]; if (acc>=nIn/2){ mad=v; break; } }
-    const T = Math.max(32, 6*mad + 12);
+    const T = Math.max(34, 6*mad + 12); gradRef.T = T; gradRef.tenWhite = gMed[0][0] > 128;
     for (let i=0;i<N;i++) mask[i] = (key[i]>=0 && rr[i]<255 && ad[i]>T) ? 1 : 0;
     // fermeture : recolle un trou coupé par un anneau imprimé (sur l'anneau, le fond de référence est clair)
     const kc = Math.max(1, Math.round(0.6*pm));
     mask = morph(morph(mask, bw, bh, kc, false), bw, bh, kc, true);
-    kk = Math.max(1, Math.round(0.28*cal_mm*pm));
+    kk = Math.max(1, Math.round(0.2*cal_mm*pm));
   }
   // 2) ouverture : efface traits de crayon, anneaux, chiffres
   let opened = morph(morph(mask, bw, bh, kk, true), bw, bh, kk, false);
@@ -630,24 +718,66 @@ function detectHoles(rawOnly){
     opened = morph(morph(opened, bw, bh, k2, true), bw, bh, k2, false);
   }
   const {comps} = components(opened, bw, bh);
-  // 3) aire d'un trou isolé, mesurée sur la cible elle-même
-  const minA = 4*pm*pm;
-  let blobs = comps.filter(cp => cp.area >= minA);
-  const areas = blobs.map(b=>b.area).sort((a,b)=>a-b);
-  let a1 = areas.length ? Math.max(minA*1.5, areas[Math.floor((areas.length-1)*0.4)]) : Math.PI*(cal_mm/2*pm)**2;
-  if (prevGrid && state.a1mm) a1 = state.a1mm*pm*pm;          // aire d'un trou apprise sur la 1re photo
-  else if (!prevGrid && areas.length >= 3) state.a1mm = a1/(pm*pm);
-  blobs = blobs.filter(b => b.area >= 0.35*a1);
+  // 3) tri par la forme : un trou a un bord net, une taille compatible avec l'ogive, et ne sort pas du cadre
+  //    Ouverture visible mesurée au pied à coulisse : 5 à 8 mm pour du 9 mm, soit 0,55 à 0,9 calibre ;
+  //    avec la couronne de fibres arrachées, jusqu'à 1,2 calibre.
+  const aLo = Math.PI*(0.25*cal_mm*pm)**2, aHi = Math.PI*(0.6*cal_mm*pm)**2, minA = 0.45*aLo;
+  const edgeMin = Math.max(10, 0.3*gradRef.T), rejected = {bord:0, flou:0, taille:0};
+  let blobs = comps.filter(cp => {
+    if (cp.area < minA){ return false; }
+    const mg = Math.round(4*pm);   // marge de 4 mm : bord de photo, baguette du porte-cible
+    if (cp.minx + x0 <= mg || cp.miny + y0 <= mg || cp.maxx + x0 >= W-1-mg || cp.maxy + y0 >= H-1-mg){ rejected.bord++; return false; }   // touche le bord de la photo : porte-cible, main, ombre
+    if (cp.area > 90*aHi){ rejected.taille++; return false; }
+    // netteté du contour : un trou tranche net, une ombre s'estompe
+    let g = 0, nb = 0; const inB = new Set(cp.px);
+    for (let q=0; q<cp.px.length; q += 1){ const k = cp.px[q], x = k%bw, y = (k/bw)|0;
+      if (x<2||y<2||x>=bw-2||y>=bh-2) continue;
+      if (inB.has(k-1) && inB.has(k+1) && inB.has(k-bw) && inB.has(k+bw)) continue;      // pixel intérieur
+      const gx = Math.abs(gv[k+2]-gv[k-2]), gy = Math.abs(gv[k+2*bw]-gv[k-2*bw]); g += Math.max(gx,gy); nb++; }
+    cp.edge = nb ? g/nb : 0;
+    if (holeHue == null && cp.edge < edgeMin){ rejected.flou++; return false; }
+    return true;
+  });
+  // Aire d'un trou isolé, estimée séparément sur le noir et sur le clair : dans le noir, la couronne de fibres
+  // blanches s'ajoute à l'ouverture ; sur le clair, seule l'ouverture ressort.
+  const pct = arr => { const a = arr.slice().sort((x,y)=>x-y); return a[Math.floor((a.length-1)*0.4)]; };
+  blobs.forEach(b => { let sx=0, sy=0; for (const k of b.px){ sx += UX[k]; sy += UY[k]; } const r = Math.hypot(sx/b.area, sy/b.area);
+    b.light = r > R_BLACK || (r < ZONE_W && gradRef.tenWhite); });
+  const clampA = v => Math.min(aHi, Math.max(aLo, v));
+  const aD = blobs.filter(b=>!b.light).map(b=>b.area), aL = blobs.filter(b=>b.light).map(b=>b.area);
+  let a1D = aD.length >= 3 ? clampA(pct(aD)) : null, a1L = aL.length >= 3 ? clampA(pct(aL)) : null;
+  if (holeHue != null){ const all = blobs.map(b=>b.area); a1D = a1L = all.length ? clampA(pct(all)) : Math.PI*(0.36*cal_mm*pm)**2; }
+  if (a1D == null && a1L == null){ a1D = aD.length ? clampA(pct(aD)) : Math.PI*(0.45*cal_mm*pm)**2; a1L = aL.length ? clampA(pct(aL)) : 0.6*a1D; }
+  else if (a1D == null) a1D = clampA(1.65*a1L); else if (a1L == null) a1L = clampA(0.6*a1D);
+  if (holeHue == null) a1L = Math.max(a1L, 0.5*a1D);
+  if (prevGrid && state.a1mm){ a1D = state.a1mm.D*pm*pm; a1L = state.a1mm.L*pm*pm; }          // aires apprises sur la 1re photo
+  else if (!prevGrid) state.a1mm = {D: a1D/(pm*pm), L: a1L/(pm*pm)};
+  const a1 = a1D;
+  blobs.forEach(b => { b.a1 = b.light ? a1L : a1D; });
+  blobs = blobs.filter(b => b.area >= 0.35*b.a1);
   // 4) nombre d'impacts par trou : proportionnel à l'aire, ou réparti pour atteindre le nombre de coups tirés
-  const tear = holeHue != null ? 1.6 : 1;   // un carton déchiré montre plus de fond qu'un trou net
-  blobs.forEach(b => { b.t = b.area/a1; b.n = nShots ? 1 : Math.max(1, Math.round(b.t/tear)); });
+  const tear = holeHue != null ? 1.6 : 1.25;   // une déchirure à plusieurs impacts montre plus de vide que la somme des trous
+  // longueur du trou le long de son grand axe (en mm) : deux impacts presque superposés donnent un trou allongé
+  blobs.forEach(b => { let sx=0, sy=0, n=b.px.length; const xs=[], ys=[];
+    for (const k of b.px){ const x=k%bw, y=(k/bw)|0; xs.push(x); ys.push(y); sx+=x; sy+=y; }
+    const mx=sx/n, my=sy/n; let cxx=0, cyy=0, cxy=0; for (let i=0;i<n;i++){ const dx=xs[i]-mx, dy=ys[i]-my; cxx+=dx*dx; cyy+=dy*dy; cxy+=dx*dy; }
+    const th = 0.5*Math.atan2(2*cxy, cxx-cyy), c=Math.cos(th), sn=Math.sin(th); let lo=1e9, hi=-1e9, lo2=1e9, hi2=-1e9;
+    for (let i=0;i<n;i++){ const p=(xs[i]-mx)*c+(ys[i]-my)*sn, q=-(xs[i]-mx)*sn+(ys[i]-my)*c; if(p<lo)lo=p; if(p>hi)hi=p; if(q<lo2)lo2=q; if(q>hi2)hi2=q; }
+    b.len = (hi-lo+1)/pm; b.wid = (hi2-lo2+1)/pm; b.mm = [UX[b.px[0]], -UY[b.px[0]]]; });
+  blobs.forEach(b => { b.t = b.area/b.a1; b.n = nShots ? 1 : Math.max(1, Math.round(b.t/tear)); });
+  let missing = 0;
   if (nShots > blobs.length){
     let rest = nShots - blobs.length;
-    while (rest-- > 0){ let bi=0, bv=-1e9; blobs.forEach((b,i)=>{ const v = b.t - b.n; if (v>bv){bv=v;bi=i;} }); blobs[bi].n++; }
+    // un coup de plus n'est attribué qu'à un trou nettement plus grand que ce qu'il contient déjà ;
+    // le reste est passé dans un trou existant : on ne l'invente pas, on le signale
+    while (rest > 0){ let bi=-1, bv=0.35; blobs.forEach((b,i)=>{ const v = b.t/tear - b.n; if (v>bv){bv=v;bi=i;} }); if (bi<0) break; blobs[bi].n++; rest--; }
+    missing = rest;
   }
   const holes=[];
   for (const cp of blobs){
-    const n = Math.min(40, cp.n), pts = cp.px.map(k => [k%bw, (k/bw)|0]);
+    // centre de l'impact : sur l'ouverture (le vide), pas sur les fibres arrachées qui partent d'un seul côté
+    const dk = cp.px.filter(k => dark[k]), src = dk.length >= 0.3*cp.px.length ? dk : cp.px;
+    const n = Math.min(40, cp.n), pts = src.map(k => [k%bw, (k/bw)|0]);
     const centers = n===1 ? [centroid(pts)] : kmeans(pts, n);
     for (const [px,py] of centers) holes.push({x:(px+x0+0.5)/s, y:(py+y0+0.5)/s, split:n>1});
   }
@@ -657,8 +787,8 @@ function detectHoles(rawOnly){
     const a=mmH[i], b=mmH[j];
     if (a.y>170 && b.y>170 && Math.abs(a.y-b.y)<15 && Math.abs(a.x+b.x)<20 && Math.abs(a.x)>40){ drop.add(i); drop.add(j); }
   }
-  if (drop.size){ const kept = holes.filter((h,i)=>!drop.has(i)); state.lastDetect = {blobs: blobs.length, total: kept.length, clips: drop.size}; return kept; }
-  state.lastDetect = {blobs: blobs.length, total: holes.length};
+  if (drop.size){ const kept = holes.filter((h,i)=>!drop.has(i)); state.lastDetect = {blobs: blobs.length, total: kept.length, clips: drop.size, rejected, missing}; return kept; }
+  state.lastDetect = {blobs: blobs.length, total: holes.length, rejected, missing, a1mm: [a1D/(pm*pm), a1L/(pm*pm)].map(v=>Math.round(v)), dbg: blobs.map(b=>[Math.round(b.mm[0]), Math.round(b.mm[1]), b.light?'L':'D', +b.t.toFixed(2), +b.len.toFixed(1), +b.wid.toFixed(1), b.n])};
   return holes;
 }
 function centroid(pts){ let x=0,y=0; for(const p of pts){x+=p[0];y+=p[1];} return [x/pts.length, y/pts.length]; }
@@ -693,7 +823,7 @@ function prepareNextSeries(){
   const stride = Math.max(1, Math.floor(tot/3000)); let k = 0;
   for (let i=0;i<grid.length;i++) if (grid[i] && (k++ % stride === 0)) pts.push([(i%G + 0.5)*GRID_C - 260, (Math.floor(i/G) + 0.5)*GRID_C - 260]);
   state.prevGrid = grid; state.prevPts = pts;
-  state.carry = state.holes.map(h => ({mm: imgToMm(cal, h.x, h.y), s: h.s||0, split: h.split}));
+  state.carry = state.holes.map(h => ({mm: imgToMm(cal, h.x, h.y), s: h.s||0, split: h.split, o: h.o, manual: h.manual}));
   state.curSeries = state.holes.reduce((m,h)=>Math.max(m, h.s||0), state.curSeries) + 1;
   return true;
 }
@@ -711,7 +841,7 @@ function alignToPrev(){
   state.lastAlign = {rot: best.th*180/Math.PI, tx: best.tx, ty: best.ty, gain: s0 ? best.v/s0 : 0};
   if (best.v < s0*1.05 + 5) return;
   const cal = getCal(), [a,b,c,d] = cal.M, co = Math.cos(best.th), sn = Math.sin(best.th);
-  const cx = cal.cx + a*best.tx + b*best.ty, cy = cal.cy + c*best.tx + d*best.ty;
+  const cx = cal.chx + a*best.tx + b*best.ty, cy = cal.chy + c*best.tx + d*best.ty;
   state.handles = handlesFrom(cx, cy, [a*co + b*sn, -a*sn + b*co, c*co + d*sn, -c*sn + d*co]);
 }
 
@@ -777,7 +907,7 @@ const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).
 
 function currentShots(){
   const cal = getCal(); if (!cal) return [];
-  return state.holes.map(h => imgToMm(cal, h.x, h.y));
+  return state.holes.map(h => { const m = imgToMm(cal, h.x, h.y); if (h.o != null) m.o = h.o; return m; });
 }
 
 function render(){
@@ -790,33 +920,35 @@ function render(){
   const cal = getCal(); if (!cal) return;
   const acc = "#FF6B2C", calC = "rgba(255,214,10,.9)";
   const cal_mm = calMm();
-  // anneaux de référence dans le repère cible
-  ctx.save(); ctx.transform(cal.M[0], cal.M[2], cal.M[1], cal.M[3], cal.cx, cal.cy);
-  const lw = 1/(v.s*cal.pxmm);
+  // anneaux et impacts : tracés en pixels image, en passant chaque point par le calage (perspective comprise)
+  ctx.save();
+  const lw = 1/v.s, P = (x,y) => mmToImg(cal, x, y);
+  const poly = (fn, n=72) => { ctx.beginPath(); for (let i=0;i<=n;i++){ const t=i/n*Math.PI*2, q=fn(t), p=P(q[0],q[1]); if(i) ctx.lineTo(p.x,p.y); else ctx.moveTo(p.x,p.y); } };
+  const disc = (x,y,r) => { const p=P(x,y); ctx.beginPath(); ctx.arc(p.x,p.y,r*cal.pxmm,0,Math.PI*2); };
+  const seg = (a,b) => { const p=P(a.x,a.y), q=P(b.x,b.y); ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y); };
   const showRings = state.mode === "calib";
   ctx.strokeStyle = calC;
   for (let k=1;k<=10;k++){ const R=(11-k)*ZONE_W; if (!showRings && R!==R_BLACK && R!==ZONE_W) continue;
-    ctx.beginPath(); ctx.arc(0,0,R,0,Math.PI*2); ctx.lineWidth = (R===R_BLACK?1.6:0.8)*lw; ctx.setLineDash(R===R_BLACK?[]:[4*lw,4*lw]); ctx.stroke(); }
+    poly(t => [R*Math.cos(t), R*Math.sin(t)]); ctx.lineWidth = (R===R_BLACK?1.6:0.8)*lw; ctx.setLineDash(R===R_BLACK?[]:[4*lw,4*lw]); ctx.stroke(); }
   ctx.setLineDash([]);
   // impacts
   const shots = currentShots(), st = computeStats(shots, cal_mm, +$("fDist").value);
   ctx.lineWidth = 2*lw;
-  state.holes.forEach((h,i) => { const u = shots[i]; ctx.beginPath(); ctx.arc(u.x, -u.y, cal_mm/2, 0, Math.PI*2);
+  state.holes.forEach((h,i) => { const u = shots[i]; disc(u.x, u.y, cal_mm/2);
     ctx.strokeStyle = serColor(h.s); ctx.setLineDash(h.split?[4*lw,3*lw]:[]); ctx.stroke(); });
   ctx.setLineDash([]);
   const fa = analyzeFliers(shots, cal_mm, +$("fDist").value, $("fHand").value);
   if (st.n >= 2 && st.esI != null){ // écart : segment entre les deux impacts les plus éloignés
-    const a = shots[st.esI], b = shots[st.esJ];
-    ctx.beginPath(); ctx.moveTo(a.x,-a.y); ctx.lineTo(b.x,-b.y); ctx.strokeStyle="rgba(255,255,255,.85)"; ctx.lineWidth=1.2*lw; ctx.setLineDash([3*lw,3*lw]); ctx.stroke(); ctx.setLineDash([]);
+    seg(shots[st.esI], shots[st.esJ]); ctx.strokeStyle="rgba(255,255,255,.85)"; ctx.lineWidth=1.2*lw; ctx.setLineDash([3*lw,3*lw]); ctx.stroke(); ctx.setLineDash([]);
   }
   if (fa){
-    ctx.beginPath(); ctx.arc(fa.core.mx, -fa.core.my, fa.lim, 0, Math.PI*2); ctx.strokeStyle="rgba(255,80,80,.55)"; ctx.lineWidth=1*lw; ctx.setLineDash([2*lw,4*lw]); ctx.stroke(); ctx.setLineDash([]);
+    poly(t => [fa.core.mx + fa.lim*Math.cos(t), fa.core.my + fa.lim*Math.sin(t)]); ctx.strokeStyle="rgba(255,80,80,.55)"; ctx.lineWidth=1*lw; ctx.setLineDash([2*lw,4*lw]); ctx.stroke(); ctx.setLineDash([]);
     fa.fliers.forEach(f => { const p = shots[f.i];
-      ctx.beginPath(); ctx.moveTo(fa.core.mx,-fa.core.my); ctx.lineTo(p.x,-p.y); ctx.strokeStyle="#FF5050"; ctx.lineWidth=1.5*lw; ctx.stroke();
-      ctx.beginPath(); ctx.arc(p.x,-p.y, cal_mm/2+1.2, 0, Math.PI*2); ctx.lineWidth=2.5*lw; ctx.stroke(); });
+      seg({x:fa.core.mx, y:fa.core.my}, p); ctx.strokeStyle="#FF5050"; ctx.lineWidth=1.5*lw; ctx.stroke();
+      disc(p.x, p.y, cal_mm/2); ctx.lineWidth=3*lw; ctx.stroke(); });   // même diamètre que l'ogive : un cercle plus grand ferait croire que l'impact touche le cordon
   }
   if (st.n >= 2){ // ellipse 1σ et PMI
-    ctx.beginPath(); ctx.ellipse(st.mx, -st.my, st.sdx, st.sdy, 0, 0, Math.PI*2);
+    poly(t => [st.mx + st.sdx*Math.cos(t), st.my + st.sdy*Math.sin(t)]);
     ctx.strokeStyle = acc; ctx.lineWidth = 1.5*lw; ctx.setLineDash([6*lw,4*lw]); ctx.stroke(); ctx.setLineDash([]);
   }
   ctx.restore();
@@ -840,7 +972,7 @@ function render(){
 // ---------- interactions ----------
 const ptrs = new Map(); let gesture = null;
 function pos(e){ const r = cv.getBoundingClientRect(); return {x: e.clientX-r.left, y: e.clientY-r.top}; }
-function pushUndo(){ state.undo.push(JSON.stringify({holes:state.holes, handles:state.handles})); if (state.undo.length>60) state.undo.shift(); $("bUndo").disabled=false; }
+function pushUndo(){ state.undo.push(JSON.stringify({holes:state.holes, handles:state.handles, persp:state.persp||[0,0]})); if (state.undo.length>60) state.undo.shift(); $("bUndo").disabled=false; }
 function nearestHole(p, maxD){
   let bi=-1, bd=maxD; state.holes.forEach((h,i)=>{ const s=toScreen(h), d=Math.hypot(s.x-p.x,s.y-p.y); if(d<bd){bd=d;bi=i;} }); return bi;
 }
@@ -872,7 +1004,7 @@ cv.addEventListener("pointermove", e => {
   if (Math.hypot(p.x-gesture.start.x, p.y-gesture.start.y) > 6) gesture.moved = true;
   if (gesture.type === "pan" && gesture.moved){ state.view.ox += p.x-gesture.last.x; state.view.oy += p.y-gesture.last.y; gesture.last = p; render(); }
   else if (gesture.type === "handle"){ state.handles[gesture.k] = toImg(p.x, p.y); render(); }
-  else if (gesture.type === "hole" && gesture.moved){ const q = toImg(p.x,p.y); state.holes[gesture.i] = {x:q.x, y:q.y, s:state.holes[gesture.i].s||0}; render(); }
+  else if (gesture.type === "hole" && gesture.moved){ const q = toImg(p.x,p.y); state.holes[gesture.i] = {...state.holes[gesture.i], x:q.x, y:q.y, split:false}; render(); }
   if (gesture.type === "pan") gesture.last = p;
 });
 function endPtr(e){
@@ -884,7 +1016,7 @@ function endPtr(e){
   if (g.type === "handle" || g.type === "hole"){ if (!g.moved) state.undo.pop(); refresh(); return; }
   if (g.type === "pan" && !g.moved){
     const q = toImg(p.x, p.y);
-    if (state.mode === "add"){ pushUndo(); state.holes.push({x:q.x, y:q.y, s:state.curSeries}); refresh(); }
+    if (state.mode === "add"){ pushUndo(); const sv = $("fAddSer").value; state.holes.push({x:q.x, y:q.y, s: sv === "" ? state.curSeries : +sv, manual:true}); refresh(); }
     else if (state.mode === "pick"){ sampleHue(q); }
     else if (state.mode === "del"){ const i = nearestHole(p, holeHitR()); if (i>=0){ pushUndo(); state.holes.splice(i,1); refresh(); } }
   }
@@ -900,7 +1032,7 @@ const HINTS = {
   add: "<b>Ajouter :</b> touche le centre d'un trou oublié. Pince ou molette pour zoomer, glisse pour te déplacer.",
   del: "<b>Supprimer :</b> touche un cercle bleu pour retirer une fausse détection.",
   move: "<b>Déplacer :</b> fais glisser un cercle bleu pour le recentrer sur son trou.",
-  pick: "<b>Couleur des trous :</b> touche l'intérieur d'un trou, là où l'on voit le fond (bois, tapis…). La détection sera relancée avec cette couleur."
+  pick: "<b>Trou modèle :</b> touche l'intérieur d'un trou bien net. L'appli cherchera tous les trous qui laissent voir la même couleur. À n'utiliser que si la détection automatique se trompe."
 };
 function setMode(m){
   state.mode = m;
@@ -920,12 +1052,15 @@ function sampleHue(q){
   state.holeHue = ((Math.atan2(sy,sx)*180/Math.PI)+360)%360;
   pushUndo(); state.holes = detectAndMerge(); setMode("add"); refresh();
 }
-$("bPick").onclick = () => { if (state.mode === "pick") setMode("add"); else setMode("pick"); };
+$("bPick").onclick = () => {
+  if (state.holeHue != null){ state.holeHue = null; pushUndo(); state.holes = detectAndMerge(); setMode("add"); refresh(); return; }   // retour à la détection automatique
+  if (state.mode === "pick") setMode("add"); else setMode("pick");
+};
 $("fShots").addEventListener("change", () => { if (!state.img) return; pushUndo(); state.holes = detectAndMerge(); refresh(); });
-$("bUndo").onclick = () => { const s = state.undo.pop(); if (s){ const o = JSON.parse(s); state.holes=o.holes; state.handles=o.handles; } $("bUndo").disabled = !state.undo.length; refresh(); };
+$("bUndo").onclick = () => { const s = state.undo.pop(); if (s){ const o = JSON.parse(s); state.holes=o.holes; state.handles=o.handles; state.persp=o.persp||[0,0]; } $("bUndo").disabled = !state.undo.length; refresh(); };
 $("bClear").onclick = () => { if (!state.holes.length) return; pushUndo(); state.holes = []; refresh(); };
 $("bDetect").onclick = () => { pushUndo(); state.holes = detectAndMerge(); refresh(); };
-$("bAutoCal").onclick = () => { pushUndo(); const ok = autoCalib(); if (!ok) setMode("calib"); fit(); refresh(); };
+$("bAutoCal").onclick = () => { pushUndo(); const ok = autoCalib(); if (ok) refineCalib(); else setMode("calib"); fit(); refresh(); };
 
 function loadFile(file, next){
   if (!file) return;
@@ -952,9 +1087,10 @@ function setImage(canvas, isSample, next){
   $("badge").hidden = !isSample && !next;
   $("badge").textContent = isSample ? "Exemple · importe ta photo" : `Série ${state.curSeries+1}`;
   const ok = autoCalib();
+  if (ok) refineCalib(); else state.persp = [0,0];
   if (next && ok){ detectHoles(true); alignToPrev(); }
   const calN = getCal();
-  const old = next && state.carry && calN ? state.carry.map(c => { const p = mmToImg(calN, c.mm.x, c.mm.y); return {x:p.x, y:p.y, s:c.s, split:c.split}; }) : [];
+  const old = next && state.carry && calN ? state.carry.map(c => { const p = mmToImg(calN, c.mm.x, c.mm.y); const h = {x:p.x, y:p.y, s:c.s, split:c.split}; if (c.o != null) h.o = c.o; if (c.manual) h.manual = true; return h; }) : [];
   state.holes = old.concat(detectHoles().map(h => ({...h, s: state.curSeries})));
   fit(); setMode(ok ? "add" : "calib");
   if (!ok) $("hint").innerHTML = "<b>Visuel noir non trouvé automatiquement.</b> " + HINTS.calib;
@@ -981,8 +1117,14 @@ function refresh(){
   const shots = currentShots(), st = computeStats(shots, cal_mm, dist);
   const ld = state.lastDetect, nS = Math.round(+$("fShots").value)||0;
   let info = (state.curSeries ? `Série ${state.curSeries+1} · ` : "") + st.n + (st.n>1?" impacts":" impact");
-  if (ld) info += ` · ${ld.blobs} trous · ${state.detectMode}`;
-  if (nS && st.n !== nS) info += ` · ${st.n>nS?"+":""}${st.n-nS} vs annoncé`;
+  if (ld) info += ` · ${ld.blobs} trous · ${state.detectMode==="couleur"?"trou modèle":"auto"}`;
+  const nCur = state.holes.filter(h => (h.s||0) === state.curSeries).length, miss = nS ? nS - nCur : 0;
+  if (miss) info += miss > 0 ? ` · ${miss} non localisé${miss>1?"s":""}` : ` · ${-miss} de trop`;
+  const mm_ = $("missMsg");
+  mm_.className = "msg"; mm_.textContent = miss > 0
+    ? `${miss} coup${miss>1?"s":""} sur ${nS} sans trou propre : ${miss>1?"ils sont passés":"il est passé"} dans un trou existant. ${miss>1?"Ils ne sont pas comptés":"Il n'est pas compté"} : ajoute-${miss>1?"les":"le"} à la main si tu sais où.`
+    : miss < 0 ? `${-miss} impact${miss<-1?"s":""} de plus que les ${nS} coups annoncés : supprime les fausses détections.` : "";
+  $("pickTxt").textContent = state.holeHue != null ? "Revenir en auto" : "Trou modèle";
   $("nInfo").textContent = info;
   $("hueSw").style.background = state.detectMode==="couleur" && state.holeHueUsed!=null ? `hsl(${state.holeHueUsed} 55% 45%)` : "transparent";
   $("sTot").textContent = st.total; $("sOf").textContent = "/ " + st.n*10;
@@ -1033,12 +1175,28 @@ function refresh(){
     if (fa.axis) h += `<div class="axis">Dispersion ${fa.axis.dir} dominante (rapport ${fmt(fa.axis.k,1)}) : ${fa.axis.label}.</div>`;
     fb.innerHTML = h;
   }
-  $("shotBody").innerHTML = shots.map((p,i) => { const sc = scoreOf(Math.hypot(p.x,p.y), cal_mm);
-    return `<tr class="${state.holes[i].split?"split":""}${fa&&fa.flags[i]?" fly":""}"><td>${i+1}</td><td>${sgn(p.x)}</td><td>${sgn(p.y)}</td><td>${sc.pts}${sc.x?"<span class='muted'>x</span>":""}</td><td>${fmt(sc.dec,1)}</td></tr>`; }).join("")
-    || `<tr><td colspan="5" class="muted" style="text-align:center;font-family:var(--body)">Aucun impact</td></tr>`;
+  const clock = p => { const r = Math.hypot(p.x,p.y); if (r < 4) return "centre"; let h = Math.round(((90 - Math.atan2(p.y,p.x)*180/Math.PI + 360) % 360)/30) % 12; return (h||12) + " h"; };
+  $("shotBody").innerHTML = shots.map((p,i) => { const sc = scoreShot(p, cal_mm), h = state.holes[i];
+    return `<tr class="${h.split?"split":""}${fa&&fa.flags[i]?" fly":""}"><td>${i+1}</td><td><span class="sw" style="background:${serColor(h.s)}"></span> ${(h.s||0)+1}</td><td>${clock(p)}</td><td>${sgn(p.x)}</td><td>${sgn(p.y)}</td><td class="pt${sc.forced?" forced":""}" data-i="${i}" title="Toucher pour corriger à la jauge">${sc.pts}${sc.x?"<span class='muted'>x</span>":""}${sc.forced?" ✎":sc.near<0.4?"<span class='jg'>≈</span>":""}</td><td>${fmt(sc.dec,1)}</td></tr>`; }).join("")
+    || `<tr><td colspan="7" class="muted" style="text-align:center;font-family:var(--body)">Aucun impact</td></tr>`;
+  // choix de la série pour un impact ajouté à la main
+  const ns = state.curSeries + 1, sel = $("fAddSer"), cur = sel.value;
+  $("addSerWrap").hidden = ns < 2;
+  if (sel.options.length !== ns){ sel.innerHTML = Array.from({length:ns}, (_,k) => `<option value="${k}">série ${k+1}</option>`).join(""); sel.value = cur !== "" && +cur < ns ? cur : String(state.curSeries); }
   $("bSave").disabled = st.n === 0;
   renderSeries(shots, state.holes.map(h=>h.s||0), cal_mm, dist, $("serCard"), $("serBody"), $("serMsg"));
 }
+$("shotBody").addEventListener("click", e => {
+  const td = e.target.closest("td.pt"); if (!td) return;
+  const i = +td.dataset.i, h = state.holes[i], cal = getCal(); if (!h || !cal) return;
+  const m = imgToMm(cal, h.x, h.y), auto = scoreOf(Math.hypot(m.x, m.y), calMm()).pts;
+  pushUndo();
+  // cycle : calculé → un point de moins → un point de plus → calculé
+  if (h.o == null) h.o = auto > 0 ? auto - 1 : auto + 1;
+  else if (h.o < auto && auto < 10) h.o = auto + 1;
+  else delete h.o;
+  refresh();
+});
 ["fCal","fDist","fClick","fUnit","fHand"].forEach(id => $(id).addEventListener("input", () => { saveSettings(); refresh(); }));
 $("fArme").addEventListener("input", () => { saveSettings(); markPreset(); });
 ["fMun","fPos"].forEach(id => $(id).addEventListener("change", saveSettings));
@@ -1076,7 +1234,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v10");
     renderHistory();
   }
 }
@@ -1090,7 +1248,7 @@ async function saveSession(){
     clickVal: +$("fClick").value || null, clickUnit: $("fUnit").value, note: $("fNote").value.trim(),
     mun: $("fMun").value.trim(), pos: $("fPos").value, v0: +$("fV0").value || null, vsd: +$("fVsd").value || null,
     series: state.holes.reduce((m,h)=>Math.max(m,(h.s||0)+1), 1),
-    shots: shots.map((p,i) => [Math.round(p.x*10)/10, Math.round(p.y*10)/10, state.holes[i].s||0])
+    shots: shots.map((p,i) => { const h = state.holes[i], a = [Math.round(p.x*10)/10, Math.round(p.y*10)/10, h.s||0]; if (h.o != null) a.push(h.o); return a; })
   };
   const msg = $("saveMsg"); msg.className = "msg"; msg.textContent = "Enregistrement…";
   try {
@@ -1100,7 +1258,7 @@ async function saveSession(){
     } else {
       doc.id = "l" + doc.createdAt; store.sessions.push(doc); ls.set("c50_seances", store.sessions); renderHistory();
     }
-    msg.className = "msg ok"; msg.textContent = `Séance enregistrée : ${shots.length} impacts, ${computeStats(doc.shots.map(([x,y])=>({x,y})), cal_mm, dist).total} points.`;
+    msg.className = "msg ok"; msg.textContent = `Séance enregistrée : ${shots.length} impacts, ${computeStats(toPts(doc.shots), cal_mm, dist).total} points.`;
     $("fNote").value = "";
   } catch(e){
     msg.className = "msg err";
@@ -1109,7 +1267,7 @@ async function saveSession(){
 }
 $("bSave").onclick = saveSession;
 
-function sessionStats(s){ const st = computeStats(s.shots.map(([x,y])=>({x,y})), s.caliberMm, s.distanceM); st.s = s; return st; }
+function sessionStats(s){ const st = computeStats(toPts(s.shots), s.caliberMm, s.distanceM); st.s = s; return st; }
 let selectedId = null, confirmDel = false;
 function fillSelect(el, values, label){
   const cur = el.value; el.innerHTML = `<option value="">${label}</option>` + values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
@@ -1143,7 +1301,7 @@ function renderHistory(){
   drawChart(list);
   renderCompare(list);
   $("histBody").innerHTML = list.slice().reverse().map(st => { const s = st.s;
-    return `<tr data-id="${esc(s.id)}" aria-selected="${s.id===selectedId}"><td>${fmtDate(s.date)}</td><td>${esc(s.arme)}</td><td>${esc(s.mun||"–")}</td><td>${s.distanceM} m</td><td>${st.n}</td><td>${st.total}</td><td>${st.n?fmt(st.avg,2):"–"}</td><td>${fmt(st.sdx,1)}</td><td>${fmt(st.sdy,1)}</td><td>${fmt(st.sdr,1)}</td><td>${fmt(st.toMoa(st.sdr),2)}</td><td>${fmt(st.off,1)}</td><td>${(()=>{const f=analyzeFliers(s.shots.map(([x,y])=>({x,y})), s.caliberMm, s.distanceM, $("fHand").value); return f?f.fliers.length:"–";})()}</td></tr>`;
+    return `<tr data-id="${esc(s.id)}" aria-selected="${s.id===selectedId}"><td>${fmtDate(s.date)}</td><td>${esc(s.arme)}</td><td>${esc(s.mun||"–")}</td><td>${s.distanceM} m</td><td>${st.n}</td><td>${st.total}</td><td>${st.n?fmt(st.avg,2):"–"}</td><td>${fmt(st.sdx,1)}</td><td>${fmt(st.sdy,1)}</td><td>${fmt(st.sdr,1)}</td><td>${fmt(st.toMoa(st.sdr),2)}</td><td>${fmt(st.off,1)}</td><td>${(()=>{const f=analyzeFliers(toPts(s.shots), s.caliberMm, s.distanceM, $("fHand").value); return f?f.fliers.length:"–";})()}</td></tr>`;
   }).join("") || `<tr><td colspan="13" class="empty" style="font-family:var(--body)">Aucune séance enregistrée pour ce filtre. Analyse une cible puis « Enregistrer dans l'historique ».</td></tr>`;
   document.querySelectorAll("#histBody tr[data-id]").forEach(tr => tr.onclick = () => { selectedId = selectedId===tr.dataset.id ? null : tr.dataset.id; confirmDel=false; renderHistory(); });
   renderDetail();
@@ -1228,7 +1386,7 @@ function drawChart(list){
 }
 
 function plotSVG(st){
-  const s = st.s, cal = s.caliberMm, shots = s.shots.map(([x,y])=>({x,y}));
+  const s = st.s, cal = s.caliberMm, shots = toPts(s.shots);
   const ext = Math.max(40, ...shots.map(p=>Math.max(Math.abs(p.x),Math.abs(p.y))+cal)) * 1.1;
   const vb = `${-ext} ${-ext} ${2*ext} ${2*ext}`, sw = ext/150;
   let h = `<svg viewBox="${vb}" role="img" aria-label="Carte des impacts"><rect x="${-ext}" y="${-ext}" width="${2*ext}" height="${2*ext}" fill="#E3D8C0"/>`;
@@ -1258,7 +1416,7 @@ function renderDetail(){
       ? `<span>Supprimer définitivement cette séance ?</span><button class="btn danger" id="bDelYes">Supprimer</button><button class="btn ghost" id="bDelNo">Garder</button>`
       : `<button class="btn danger" id="bDel">Supprimer la séance</button>`}</div>
   </div></div>`;
-  renderSeries(s.shots.map(([x,y])=>({x,y})), s.shots.map(p=>p[2]||0), s.caliberMm, s.distanceM, $("dSer"), $("dSerBody"), $("dSerMsg"));
+  renderSeries(toPts(s.shots), s.shots.map(p=>p[2]||0), s.caliberMm, s.distanceM, $("dSer"), $("dSerBody"), $("dSerMsg"));
   if ($("bDel")) $("bDel").onclick = () => { confirmDel = true; renderDetail(); };
   if ($("bDelNo")) $("bDelNo").onclick = () => { confirmDel = false; renderDetail(); };
   if ($("bDelYes")) $("bDelYes").onclick = async () => {
@@ -1275,7 +1433,7 @@ function buildCSV(){
   const n = v => v==null||!isFinite(v) ? "" : String(Math.round(v*100)/100).replace(".", ",");
   const q = v => `"${String(v??"").replace(/"/g,'""')}"`;
   const rows = filtered().map(sessionStats).map(st => { const s = st.s;
-    return [s.date, q(s.arme), q(s.mun||""), q(s.pos||""), n(s.v0), n(s.vsd), q(s.calibre), s.distanceM, st.n, st.total, n(st.dec), st.x, n(st.avg), n(st.mx), n(st.my), n(st.off), n(st.sdx), n(st.sdy), n(st.sdr), n(st.toMoa(st.sdr)), n(st.toMrad(st.sdr)), n(st.mr), n(st.es), ...(()=>{const f=analyzeFliers(s.shots.map(([x,y])=>({x,y})), s.caliberMm, s.distanceM, "droitier"); return f?[f.fliers.length, n(f.core.es), n(f.core.sdr)]:["","",""];})(), q(s.note), q(s.shots.map(p=>`${p[0]} ${p[1]} s${(p[2]||0)+1}`).join(" | "))].join(";"); });
+    return [s.date, q(s.arme), q(s.mun||""), q(s.pos||""), n(s.v0), n(s.vsd), q(s.calibre), s.distanceM, st.n, st.total, n(st.dec), st.x, n(st.avg), n(st.mx), n(st.my), n(st.off), n(st.sdx), n(st.sdy), n(st.sdr), n(st.toMoa(st.sdr)), n(st.toMrad(st.sdr)), n(st.mr), n(st.es), ...(()=>{const f=analyzeFliers(toPts(s.shots), s.caliberMm, s.distanceM, "droitier"); return f?[f.fliers.length, n(f.core.es), n(f.core.sdr)]:["","",""];})(), q(s.note), q(s.shots.map(p=>`${p[0]} ${p[1]} s${(p[2]||0)+1}`).join(" | "))].join(";"); });
   return "﻿" + head.join(";") + "\n" + rows.join("\n");
 }
 // Enregistre un fichier : via Claude dans l'artifact, par un lien de téléchargement dans l'appli autonome
@@ -1328,7 +1486,7 @@ $("hMetric").value = ls.get("c50_hmetric", "sdr");
 let lastW = 0;
 new ResizeObserver(() => { if ($("view-an").hidden) return; const w = Math.round(stage.getBoundingClientRect().width); resize(); if (state.img && w !== lastW){ lastW = w; fit(); } }).observe(stage);
 setImage(makeSample(), true);
-window.__c50 = {state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries};
+window.__c50 = {state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries, refineCalib, mmToImg, toScreen};
 renderHistory();
 initStore();
 })();
