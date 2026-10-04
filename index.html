@@ -722,12 +722,19 @@ function detectHoles(rawOnly){
   //    Ouverture visible mesurée au pied à coulisse : 5 à 8 mm pour du 9 mm, soit 0,55 à 0,9 calibre ;
   //    avec la couronne de fibres arrachées, jusqu'à 1,2 calibre.
   const aLo = Math.PI*(0.25*cal_mm*pm)**2, aHi = Math.PI*(0.6*cal_mm*pm)**2, minA = 0.45*aLo;
-  const edgeMin = Math.max(10, 0.3*gradRef.T), rejected = {bord:0, flou:0, taille:0};
+  const edgeMin = Math.max(10, 0.3*gradRef.T), rejected = {bord:0, flou:0, taille:0, chiffre:0};
   let blobs = comps.filter(cp => {
     if (cp.area < minA){ return false; }
     const mg = Math.round(4*pm);   // marge de 4 mm : bord de photo, baguette du porte-cible
     if (cp.minx + x0 <= mg || cp.miny + y0 <= mg || cp.maxx + x0 >= W-1-mg || cp.maxy + y0 >= H-1-mg){ rejected.bord++; return false; }   // touche le bord de la photo : porte-cible, main, ombre
     if (cp.area > 90*aHi){ rejected.taille++; return false; }
+    // chiffres imprimés (1 à 9, sur les axes horizontal et vertical, au milieu de chaque zone) : un fragment de chiffre
+    // peut survivre au nettoyage. Un vrai trou posé sur un chiffre est plus large et plus grand que ce fragment.
+    { let sx=0, sy=0; for (const k of cp.px){ sx += UX[k]; sy += UY[k]; } cp.ux = sx/cp.area; cp.uy = sy/cp.area;
+      const ax = Math.abs(cp.ux), ay = Math.abs(cp.uy), rad = Math.max(ax, ay);
+      const nearDigit = Math.min(ax, ay) < 7 && rad > 30 && Math.abs(rad - (37.5 + 25*Math.max(0, Math.min(8, Math.round((rad-37.5)/25))))) < 8;
+      const minSide = Math.min(cp.maxx-cp.minx+1, cp.maxy-cp.miny+1)/pm;
+      if (holeHue == null && nearDigit && (minSide < 0.5*cal_mm || cp.area < Math.PI*(0.3*cal_mm*pm)**2)){ rejected.chiffre++; return false; } }
     // netteté du contour : un trou tranche net, une ombre s'estompe
     let g = 0, nb = 0; const inB = new Set(cp.px);
     for (let q=0; q<cp.px.length; q += 1){ const k = cp.px[q], x = k%bw, y = (k/bw)|0;
@@ -1234,7 +1241,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v10");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v11");
     renderHistory();
   }
 }

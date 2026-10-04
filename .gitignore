@@ -1,0 +1,8 @@
+node_modules/
+# Clés de signature Android (PWABuilder) : ne jamais les publier
+*.keystore
+*.jks
+signing-key-info.txt
+signing.keystore
+*.apk
+*.aab
