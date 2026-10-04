@@ -493,14 +493,18 @@ function components(mask, W, H){
   return {lab, comps};
 }
 
-function autoCalib(){
+function autoCalib(close){
   const img = state.img; if (!img) return false;
   const s = Math.min(1, 720/Math.max(img.width, img.height));
   const W = Math.round(img.width*s), H = Math.round(img.height*s);
   const c = document.createElement("canvas"); c.width=W; c.height=H;
   const x = c.getContext("2d", {willReadFrequently:true}); x.drawImage(img,0,0,W,H);
   const g = grayOf(x, W, H), t = otsu(g);
-  const mask = new Uint8Array(W*H); for (let i=0;i<g.length;i++) mask[i] = g[i] < t ? 1 : 0;
+  const dark = new Uint8Array(W*H); for (let i=0;i<g.length;i++) dark[i] = g[i] < t ? 1 : 0;
+  // close : fermeture morphologique. À cette résolution un cordon blanc ne fait qu'un ou deux pixels et peut couper
+  // le visuel en un disque et des couronnes ; on ne garderait alors que le disque intérieur (cible 25 ou 50 % trop petite).
+  // Elle n'est pas appliquée d'office : elle déplace un peu le calage des photos qui passent déjà.
+  const mask = close ? morph(morph(dark, W, H, 2, false), W, H, 2, true) : dark;
   const {lab, comps} = components(mask, W, H);
   let best=null;
   for (const cp of comps){
@@ -550,7 +554,7 @@ function refineCalib(){
     for (let a=0; a<360; a+=1.5){
       const th = a*Math.PI/180, co = Math.cos(th), sn = Math.sin(th), prof = [];
       let ok = true;
-      for (let r=R-6; r<=R+6.001; r+=0.2){ const p = mmToImg(cal, r*co, -r*sn), v = at(p.x, p.y); if (v<0){ ok=false; break; } prof.push(v); }
+      for (let r=R-6; r<=R+(type==="edge"?9:6)+0.001; r+=0.2){ const p = mmToImg(cal, r*co, -r*sn), v = at(p.x, p.y); if (v<0){ ok=false; break; } prof.push(v); }
       if (!ok) continue;
       if (type === "line"){
         const srt = prof.slice().sort((x,y)=>x-y), base = srt[srt.length>>1]; let mx=-1, mi=0;
@@ -562,8 +566,11 @@ function refineCalib(){
         for (let i=i0;i<=i1;i++){ const wv = prof[i]-half; sw += wv; sr += wv*(R-6+i*0.2); }
         pts.push([th, sr/sw]);
       } else {
-        let best=0, bi=-1; for (let i=3;i<prof.length-3;i++){ const d = (prof[i+3]+prof[i+2]) - (prof[i-3]+prof[i-2]); if (d>best){best=d;bi=i;} }
+        let best=0, bi=-1; for (let i=3;i<58;i++){ const d = (prof[i+3]+prof[i+2]) - (prof[i-3]+prof[i-2]); if (d>best){best=d;bi=i;} }
         if (best < 60) continue;
+        // un vrai bord reste clair au-delà ; un cordon blanc pris pour le bord redevient noir après 1 mm
+        const lo = (prof[bi-3]+prof[bi-2])/2, hi = (prof[bi+3]+prof[bi+2])/2, beyond = prof.slice(bi+8, bi+16);
+        if (beyond.length < 4 || Math.min(...beyond) < (lo+hi)/2) continue;
         pts.push([th, R-6+bi*0.2]);
       }
     }
@@ -597,6 +604,31 @@ function refineCalib(){
   state.handles = handlesFrom(cal.chx + cal.M[0]*e[0] + cal.M[1]*e[1], cal.chy + cal.M[2]*e[0] + cal.M[3]*e[1], M);
   state.persp = [-2*kx, -2*ky];
   return {shift: Math.hypot(kx,ky)*R2, scale: sc, rings: n};
+}
+
+// Calage complet. Si les trois anneaux ne sont pas tous retrouvés, le disque noir pris par autoCalib est peut-être
+// l'intérieur d'un cordon (r = 75 ou 50) : on réessaie à ces échelles, puis avec la fermeture, et on garde l'essai
+// qui retrouve le plus d'anneaux. state.calSuspect signale un calage sans bord du visuel ou avec un seul anneau :
+// on ne détecte rien dessus.
+function calibrate(){
+  state.calSuspect = false;
+  const rings = () => (state.calInfo||[]).length;
+  let best = null;
+  for (const close of [false, true]){
+    if (!autoCalib(close)) continue;
+    const h0 = state.handles, cx = (h0.t.x+h0.r.x+h0.b.x+h0.l.x)/4, cy = (h0.t.y+h0.r.y+h0.b.y+h0.l.y)/4, M0 = getCal().M;
+    for (const k of [1, R_BLACK/75, R_BLACK/50]){
+      state.handles = handlesFrom(cx, cy, M0.map(v => v*k));
+      refineCalib();
+      if (!best || rings() > best.n) best = {n: rings(), handles: state.handles, persp: state.persp, info: state.calInfo};
+      if (best.n === 3) break;
+    }
+    if (best && best.n === 3) break;
+  }
+  if (!best){ state.persp = [0,0]; state.calInfo = []; return false; }   // autoCalib a posé les poignées de repli
+  state.handles = best.handles; state.persp = best.persp; state.calInfo = best.info;
+  state.calSuspect = best.n < 2 || !best.info.some(m => m.R === R_BLACK);
+  return true;
 }
 
 // ---------- détection des impacts ----------
@@ -1034,6 +1066,7 @@ $("zin").onclick = () => { const r=stage.getBoundingClientRect(); zoomAt(1.4, r.
 $("zout").onclick = () => { const r=stage.getBoundingClientRect(); zoomAt(1/1.4, r.width/2, r.height/2); };
 $("zfit").onclick = fit;
 
+const CAL_DOUTE = "<b>Calage douteux :</b> les anneaux de la cible n'ont pas été retrouvés. ";
 const HINTS = {
   calib: "<b>Calibrer :</b> fais glisser les 4 carrés jaunes sur le bord du visuel noir (haut, droite, bas, gauche). Les anneaux jaunes doivent recouvrir ceux de la cible.",
   add: "<b>Ajouter :</b> touche le centre d'un trou oublié. Pince ou molette pour zoomer, glisse pour te déplacer.",
@@ -1067,7 +1100,7 @@ $("fShots").addEventListener("change", () => { if (!state.img) return; pushUndo(
 $("bUndo").onclick = () => { const s = state.undo.pop(); if (s){ const o = JSON.parse(s); state.holes=o.holes; state.handles=o.handles; state.persp=o.persp||[0,0]; } $("bUndo").disabled = !state.undo.length; refresh(); };
 $("bClear").onclick = () => { if (!state.holes.length) return; pushUndo(); state.holes = []; refresh(); };
 $("bDetect").onclick = () => { pushUndo(); state.holes = detectAndMerge(); refresh(); };
-$("bAutoCal").onclick = () => { pushUndo(); const ok = autoCalib(); if (ok) refineCalib(); else setMode("calib"); fit(); refresh(); };
+$("bAutoCal").onclick = () => { pushUndo(); const ok = calibrate(); if (!ok || state.calSuspect) setMode("calib"); fit(); refresh(); if (ok && state.calSuspect) $("hint").innerHTML = CAL_DOUTE + HINTS.calib; };
 
 function loadFile(file, next){
   if (!file) return;
@@ -1093,14 +1126,15 @@ function setImage(canvas, isSample, next){
   if (!next){ state.curSeries = 0; state.prevGrid = null; state.prevPts = null; state.carry = null; state.a1mm = null; state.holeHue = null; state.lastAlign = null; }
   $("badge").hidden = !isSample && !next;
   $("badge").textContent = isSample ? "Exemple · importe ta photo" : `Série ${state.curSeries+1}`;
-  const ok = autoCalib();
-  if (ok) refineCalib(); else state.persp = [0,0];
-  if (next && ok){ detectHoles(true); alignToPrev(); }
+  const ok = calibrate(), doute = ok && state.calSuspect;
+  if (next && ok && !doute){ detectHoles(true); alignToPrev(); }
   const calN = getCal();
   const old = next && state.carry && calN ? state.carry.map(c => { const p = mmToImg(calN, c.mm.x, c.mm.y); const h = {x:p.x, y:p.y, s:c.s, split:c.split}; if (c.o != null) h.o = c.o; if (c.manual) h.manual = true; return h; }) : [];
-  state.holes = old.concat(detectHoles().map(h => ({...h, s: state.curSeries})));
-  fit(); setMode(ok ? "add" : "calib");
+  // calage douteux : mieux vaut ne rien détecter que remplir la cible de faux impacts
+  state.holes = old.concat(doute ? [] : detectHoles().map(h => ({...h, s: state.curSeries})));
+  fit(); setMode(ok && !doute ? "add" : "calib");
   if (!ok) $("hint").innerHTML = "<b>Visuel noir non trouvé automatiquement.</b> " + HINTS.calib;
+  if (doute) $("hint").innerHTML = CAL_DOUTE + "Aucun impact n'a été détecté. " + HINTS.calib + " Puis touche « Détecter les impacts ».";
   refresh();
 }
 
@@ -1241,7 +1275,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v11");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v12");
     renderHistory();
   }
 }
