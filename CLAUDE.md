@@ -30,8 +30,8 @@ pas à pas, sans jargon, et propose toujours le chemin le plus simple.
 | `sw.js` | Service worker : cache pour le fonctionnement hors ligne. |
 | `manifest.webmanifest`, `icon-*.png`, `apple-touch-icon.png` | Installation comme appli (PWA). |
 | `tests/detection.test.cjs` | Test de non-régression de la détection. |
-| `tests/photos/` | Séance réelle du 02/10/2026 : même cible après 10, 20 et 30 coups. |
-| `tests/attendu.json` | Résultats de référence validés par l'utilisateur. |
+| `tests/photos/` | Séances réelles : 02/10/2026 (10 m, 3 photos) et 04/10/2026 (25 m, 2 photos, plus deux recadrages pour le calage). |
+| `tests/attendu.json`, `tests/attendu-2026-10-04.json` | Résultats de référence validés par l'utilisateur. |
 | `docs/PASSATION.md` | Historique, mesures au pied à coulisse, décisions et pistes. |
 
 ## Mise en ligne
@@ -42,8 +42,8 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v11` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v11`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v12` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v12`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,
@@ -68,10 +68,13 @@ avec ≈ et laisse l'utilisateur corriger les points à la main (`h.o`).
 
 ## La détection, dans l'ordre (`detectHoles`)
 
-1. **Calage** (`autoCalib`, `refineCalib`). Le visuel noir donne une première ellipse. Puis on relève
+1. **Calage** (`calibrate`, qui appelle `autoCalib` puis `refineCalib`). Le visuel noir donne une première ellipse. Puis on relève
    sur 240 rayons les cordons blancs du 9 (r = 50) et du 8 (r = 75) et le bord du visuel (r = 100).
    Le décalage de leurs centres, proportionnel à r², donne la perspective. Modèle :
    `p = c0 + M·u / (1 + w·u)`. Sans cette étape le centre est faux de 3 mm sur une photo prise de biais.
+   Si les trois anneaux ne sont pas retrouvés, le disque noir pris au départ était sans doute l'intérieur
+   d'un cordon : on réessaie à l'échelle 100/75 et 100/50, puis avec une fermeture morphologique. Sans bord
+   du visuel ou avec un seul anneau, le calage est « douteux » : rien n'est détecté, l'utilisateur recale.
 2. **Masque « pas du papier »**. Le carton n'a que deux teintes. Un pixel qui s'écarte de la teinte
    locale attendue (luminance et couleur, par cellules de 40 mm) est un candidat. Cette méthode ne
    dépend pas de ce qu'il y a derrière la cible.
@@ -96,7 +99,10 @@ npm test
 
 Le test rejoue la séance du 02/10/2026 et compare à `tests/attendu.json` : 9, 10 puis 9 impacts
 localisés, 265 points en automatique. Après les trois corrections manuelles de l'utilisateur, la séance vaut
-283 points sur 300 (91, 93, 99). N'utilise `--record` qu'après avoir regardé le résultat sur l'image :
+283 points sur 300 (91, 93, 99). Il rejoue aussi la séance du 04/10/2026 (25 m) : 10 puis 10 impacts,
+70 + 74 = 144 points, et vérifie le calage sur deux recadrages qui le faisaient échouer en v11.
+Dans la session cloud, si Playwright ne trouve pas son navigateur, lance le test avec
+`PW_CHROMIUM=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm test`. N'utilise `--record` qu'après avoir regardé le résultat sur l'image :
 réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
 
 ## Limites connues, à ne pas présenter comme résolues
@@ -107,8 +113,10 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
   ont été comptées pour une.
 - Dans les grandes déchirures, le nombre d'impacts est fiable avec le mode séries, mais leur position
   est estimée.
-- Validé sur une seule séance réelle, au 9 mm, à 10 m. Rien n'a été testé à la carabine (.300 Win Mag,
-  .300 Blackout) ni à 25 m et au-delà.
+- Validé sur deux séances réelles au 9 mm, à 10 m et à 25 m. Rien n'a été testé à la carabine (.300 Win Mag,
+  .300 Blackout) ni au-delà de 25 m.
+- La détection reste sensible à de petits écarts de calage : un décalage de quelques dixièmes de mm
+  suffit à faire apparaître un fragment de chiffre ou à changer le découpage d'une déchirure.
 - La rotation de la photo n'est pas détectable sur un visuel rond : une photo penchée fausse la
   répartition horizontal/vertical, pas le score.
 

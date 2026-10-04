@@ -20,7 +20,7 @@ Son matériel et ses habitudes :
   sur le porte-cible, avec le vide du pas de tir derrière.
 - Téléphone Android et PC Windows 10. L'appli est installée depuis Chrome.
 
-## Ce que fait l'application (version 11)
+## Ce que fait l'application (version 12)
 
 - Calage automatique de la cible, avec correction de perspective, et poignées de réglage manuel.
 - Détection des impacts, correction à la main : ajouter, supprimer, déplacer, annuler.
@@ -78,6 +78,18 @@ doublait des trous isolés pour atteindre le total. Remplacé en v8 par un signa
 simple réenregistrement de la photo en JPEG. Corrigé en v11 par un filtre sur les positions connues
 des chiffres. Cet épisode montre que la détection reste sensible à de petites variations d'image.
 
+**Cible vue 25 % trop petite (v12).** Le 04/10/2026, une photo prise depuis l'appli a donné 71 « impacts » posés
+sur le bord du visuel noir. Le calage cherche le visuel sur une copie réduite à 720 pixels, où un cordon blanc ne
+fait qu'un ou deux pixels. Quand il survit à la réduction, il coupe le visuel en un disque et des couronnes ;
+seul le disque intérieur au cordon du 8 (ou du 9) a une forme de disque, il était pris pour le visuel entier.
+La couronne noire tombait alors là où l'appli attend du papier blanc. Reproduit sur 17 photos de contrôle sur 56
+(les deux photos du 04/10 recadrées ou redimensionnées), corrigé de trois façons : un bord du visuel n'est accepté
+que si le papier reste clair au-delà ; si les trois anneaux ne sont pas retrouvés, on réessaie aux échelles
+100/75 et 100/50, puis avec une fermeture morphologique ; sans bord ni deux anneaux, le calage est signalé
+douteux et rien n'est détecté. Le réessai aux autres échelles corrige seul les 56 photos, la fermeture aussi ;
+la fermeture reste pourtant en dernier recours. Elle n'est pas appliquée d'office : elle déplaçait le calage des photos saines de quelques dixièmes de mm, assez pour
+faire réapparaître le « 4 » du bas comme impact et fusionner deux coups d'une déchirure sur la série 2 du 04/10.
+
 ## La séance de référence (02/10/2026)
 
 P320, 9 mm, 10 m, 30 coups en trois séries sur une même cible. Photos dans `tests/photos/`.
@@ -101,6 +113,23 @@ Les positions 2 et 3 sont estimées à 1 ou 2 mm près.
 
 Deux cibles de septembre (photos sur table en bois, trous entourés au crayon de couleur) ont servi
 aux premiers réglages. Elles ne sont pas dans le dépôt : elles montrent l'intérieur du logement.
+
+## La séance du 04/10/2026
+
+P320, 9 mm, Magtech 124 gr, 25 m, appui, 20 coups en deux séries. Photos dans `tests/photos/`, reçues déjà
+recompressées en 1500 × 2000 sans métadonnées. Les recadrages `_recadree` (200 px en moins en haut) servent au
+test du calage.
+
+| Série | Trouvés automatiquement | Points |
+|---|---|---|
+| 1 | 10 sur 10 | 70 |
+| 2 | 10 sur 10 (déchirure de gauche découpée en 4) | 74 |
+| Total | 20 sur 20 | 144 |
+
+L'utilisateur a enregistré ce résultat tel quel. Deux impacts sont à moins d'1 mm d'un cordon : le n° 2 de la
+série 1 (0,3 mm du cordon du 7, compté 6) et le dernier de la série 2 (0,8 mm du cordon du 6, compté 6). Le premier
+n'a pas été vérifié à la jauge. Lors d'un autre essai, l'utilisateur a obtenu 19 sur 20 à cause d'un double impact
+très proche ; ce cas n'a pas été reproduit sur ces fichiers.
 
 ## Pistes d'évolution
 
