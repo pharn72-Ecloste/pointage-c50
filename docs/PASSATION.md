@@ -20,7 +20,7 @@ Son matériel et ses habitudes :
   sur le porte-cible, avec le vide du pas de tir derrière.
 - Téléphone Android et PC Windows 10. L'appli est installée depuis Chrome.
 
-## Ce que fait l'application (version 12)
+## Ce que fait l'application (version 13)
 
 - Calage automatique de la cible, avec correction de perspective, et poignées de réglage manuel.
 - Détection des impacts, correction à la main : ajouter, supprimer, déplacer, annuler.
@@ -131,12 +131,38 @@ série 1 (0,3 mm du cordon du 7, compté 6) et le dernier de la série 2 (0,8 mm
 n'a pas été vérifié à la jauge. Lors d'un autre essai, l'utilisateur a obtenu 19 sur 20 à cause d'un double impact
 très proche ; ce cas n'a pas été reproduit sur ces fichiers.
 
+## La séance DDM4 .300 BLK (25 m, v13)
+
+Daniel Defense DDM4 300S, .300 AAC Blackout supersonique, 25 m, 15 coups en trois séries de 5 sur une cible C50
+à 10 blanc. Fond noir derrière la cible : les trous sont noirs, y compris dans le visuel. Comptage de l'utilisateur
+à la jauge : 50, 50, 49 = 149. Le coup à 3 h de la série 1 touche le 10 de 0,2 à 0,3 mm (mesure photo : 0,5 à 0,8 mm),
+alors que le trou visible ne touche pas le blanc. Mesures au pied à coulisse : trou n° 1, ouverture 7,80 mm et
+8,22 mm avec la corolle ; trou n° 2, 5,58 et 6,00 mm. Le trou est plus petit que l'ogive (7,82 mm), au contraire
+du 9 mm rond qui arrache le carton.
+
+Cette séance a révélé trois défauts, corrigés en v13.
+
+**Perspective doublée (v8 à v12).** Le centre de la cible était juste, mais le décalage des anneaux était appliqué
+deux fois : jusqu'à 3 à 5 mm d'erreur au bord du visuel sur une photo de biais. Mesuré indépendamment (cercles
+ajustés sur l'image brute) : après correction, le bord du visuel tombe à 100 ± 0,4 mm sur 16 rayons, sur toutes
+les photos. Effets : un faux impact sur le bord du visuel (série 3 DDM4), l'impact n° 4 du 02/10 passe de 10 à 9
+comme à la jauge, plusieurs impacts du 04/10 bougent de 1 à 4 mm sans changer le total.
+
+**Coups cachés dans le groupement.** À 25 m à la carabine, les coups se chevauchent : le mode séries effaçait
+4 coups sur 15 avec les anciens trous. La surface gagnée par chaque déchirure les retrouve tous (149 points,
+égal au comptage). Le même calcul place le coup de la série 3 du 02/10, en zone et en points justes, mais à 17 mm
+de la position notée par l'utilisateur.
+
+**Rotation entre photos fausse de 4 à 5°.** Avec des trous tous près du centre, une rotation les déplace trop peu
+pour être mesurée sur eux. Les quatre « 9 » imprimés la donnent à 0,02° près (essai sur une photo tournée de 3°).
+
 ## Pistes d'évolution
 
 L'utilisateur a dit avoir des idées d'évolution sans les avoir encore détaillées : demande-les lui avant de
 proposer les tiennes. Ce qui a été évoqué ou qui découle des limites :
 
-- Tester et régler la détection à la carabine (ogive de 7,82 mm) et à 25 m.
+- Tester le .300 Win Mag (100 et 200 m), le .300 BLK subsonique (trous ovales possibles) et la C50 à 10 noir.
+- Cibles vierges des deux modèles, promises par l'utilisateur : test « zéro impact » et calage du modèle à 10 noir.
 - Enrichir le jeu de tests à chaque nouvelle séance réelle, avec le comptage manuel de l'utilisateur.
 - Découper `index.html` en modules, une fois les tests en place, sans changer le déploiement.
 - Carte cumulée des coups écartés sur toutes les séances, pour repérer une faute récurrente.
