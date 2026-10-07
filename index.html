@@ -445,9 +445,10 @@ function getCal(){
   const b = (h.b.x-h.t.x)/(2*R_BLACK), d = (h.b.y-h.t.y)/(2*R_BLACK);  // colonne y-mm (vers le bas)
   const det = a*d - b*c; if (Math.abs(det) < 1e-9) return null;
   // Perspective : une photo prise de biais décale le centre apparent des anneaux d'autant plus qu'ils sont grands.
-  // Modèle : p = c0 + M·u / (1 + w·u). Les poignées donnent l'ellipse du visuel noir (centre chx, chy) ;
-  // le vrai centre de la cible est c0 = ch + M·(R²/2)·w.
-  const w = state.persp || [0,0], k2 = R_BLACK*R_BLACK/2;
+  // Modèle : p = c0 + M·u / (1 + w·u). Le cercle de rayon r a pour image une ellipse dont le centre est décalé
+  // de −M·w·r² (et non de −M·w·r²/2 : le point vers lequel la photo penche et le point opposé se décalent tous deux
+  // de r²·w). Les poignées donnent l'ellipse du visuel noir (centre chx, chy) ; le vrai centre est c0 = ch + M·R²·w.
+  const w = state.persp || [0,0], k2 = R_BLACK*R_BLACK;
   const c0x = cx + (a*w[0] + b*w[1])*k2, c0y = cy + (c*w[0] + d*w[1])*k2;
   return {cx:c0x, cy:c0y, chx:cx, chy:cy, w, M:[a,b,c,d], Mi:[d/det, -b/det, -c/det, a/det], pxmm: Math.sqrt(Math.abs(det))};
 }
@@ -602,7 +603,7 @@ function refineCalib(){
   const ed = meas.find(m => m.R === R_BLACK), sc = ed ? ed.R0/R_BLACK : 1;   // échelle : sur le bord du visuel seulement (un cordon se mesure à son bord extérieur, pas en son milieu)
   const M = cal.M.map(v => v*sc);
   state.handles = handlesFrom(cal.chx + cal.M[0]*e[0] + cal.M[1]*e[1], cal.chy + cal.M[2]*e[0] + cal.M[3]*e[1], M);
-  state.persp = [-2*kx, -2*ky];
+  state.persp = [-kx, -ky];                                   // décalage mesuré k·r² = −w·r² (v12 et avant : −2k, perspective doublée)
   return {shift: Math.hypot(kx,ky)*R2, scale: sc, rings: n};
 }
 
@@ -743,6 +744,7 @@ function detectHoles(rawOnly){
     if (gx>=0&&gy>=0&&gx<GRID_N&&gy<GRID_N){ cellOf[i]=gy*GRID_N+gx; if (opened[i]) grid[cellOf[i]]=1; } }
   state.curGrid = grid;
   if (rawOnly) return [];
+  const full = opened.slice();             // tous les trous de cette photo, anciens compris (copie : on efface ensuite)
   if (prevGrid){ // série suivante : on retire tout ce qui était déjà troué sur la photo précédente
     const excl = morph(prevGrid, GRID_N, GRID_N, 2, false);
     for (let i=0;i<N;i++) if (opened[i] && cellOf[i]>=0 && excl[cellOf[i]]) opened[i]=0;
@@ -820,6 +822,50 @@ function detectHoles(rawOnly){
     const centers = n===1 ? [centroid(pts)] : kmeans(pts, n);
     for (const [px,py] of centers) holes.push({x:(px+x0+0.5)/s, y:(py+y0+0.5)/s, split:n>1});
   }
+  // Coups annoncés sans trou propre, en mode séries : une balle tombée dans une déchirure l'agrandit. Pour chaque
+  // déchirure, surplus = surface gagnée depuis la photo précédente − surface des nouveaux impacts déjà comptés dedans.
+  // Chaque coup manquant va à la déchirure au plus grand surplus (au moins 0,4 trou isolé), à l'endroit qui a été
+  // arraché, avec une position estimée (tracé en pointillé). Le bruit d'une photo à l'autre reste sous 0,5 trou ;
+  // le nombre de coups vient toujours de l'utilisateur : la surface désigne où, jamais combien.
+  const pg = prevGrid && state.prevHoleGrid;
+  if (pg && missing > 0){
+    const {lab, comps: fc} = components(full, bw, bh);
+    const placed = holes.map(h => ({h, x:(h.x*s - x0 - 0.5), y:(h.y*s - y0 - 0.5)}));
+    const tears = [];
+    for (const c of fc){
+      const now = new Set(), old = new Set(); let sx=0, sy=0;
+      for (const k of c.px){ const ce = cellOf[k]; if (ce < 0) continue; now.add(ce); if (pg[ce]) old.add(ce); sx += UX[k]; sy += UY[k]; }
+      const r = Math.hypot(sx/c.area, sy/c.area), a1mm = (r > R_BLACK || (r < ZONE_W && gradRef.tenWhite) ? a1L : a1D)/(pm*pm);
+      const inside = placed.filter(p => { const x = Math.round(p.x), y = Math.round(p.y); return x>=0 && y>=0 && x<bw && y<bh && lab[y*bw + x] === c.id; });
+      if (!old.size && !inside.length) continue;          // ni ancien trou ni nouvel impact : rien où un coup aurait pu se cacher
+      const surplus = 0.25*(now.size - old.size) - inside.length*a1mm;
+      if (surplus >= 0.4*a1mm) tears.push({c, a1mm, surplus, inside, fresh: !old.size, extra: 0});
+    }
+    while (missing > 0){
+      let t = null; for (const u of tears) if (u.surplus - u.extra*u.a1mm >= 0.4*u.a1mm && (!t || u.surplus - u.extra*u.a1mm > t.surplus - t.extra*t.a1mm)) t = u;
+      if (!t) break; t.extra++; missing--;
+    }
+    const exm = morph(pg, GRID_N, GRID_N, 2, false), rIn = (cal_mm/2)*pm;
+    for (const t of tears){ if (!t.extra) continue;
+      if (t.fresh){ // déchirure entièrement nouvelle : on la redécoupe en autant d'impacts, comme un trou trop grand
+        const dk = t.c.px.filter(k => dark[k]), src = dk.length >= 0.3*t.c.px.length ? dk : t.c.px;
+        const centers = kmeans(src.map(k => [k%bw, (k/bw)|0]), t.inside.length + t.extra);
+        const olds = new Set(t.inside.map(p => p.h));
+        for (let i = holes.length-1; i >= 0; i--) if (olds.has(holes[i])) holes.splice(i, 1);
+        // les « estimés » sont les centres les plus éloignés des impacts trouvés au départ
+        const far = centers.map(([px,py]) => Math.min(...t.inside.map(p => Math.hypot(px-p.x, py-p.y))));
+        const rank = far.map((d,i) => i).sort((i,j) => far[j]-far[i]).slice(0, t.extra);
+        centers.forEach(([px,py], i) => holes.push({x:(px+x0+0.5)/s, y:(py+y0+0.5)/s, split:true, est: rank.includes(i)}));
+        continue;
+      }
+      // pixels arrachés depuis la photo précédente, hors des impacts déjà placés dans cette déchirure
+      let src = t.c.px.filter(k => cellOf[k] >= 0 && !exm[cellOf[k]]);
+      const free = src.filter(k => { const x = k%bw, y = (k/bw)|0; return t.inside.every(p => Math.hypot(x-p.x, y-p.y) > rIn); });
+      if (free.length >= 5) src = free; else if (src.length < 5) src = t.c.px;
+      const pts = src.map(k => [k%bw, (k/bw)|0]), centers = t.extra === 1 ? [centroid(pts)] : kmeans(pts, t.extra);
+      for (const [px,py] of centers) holes.push({x:(px+x0+0.5)/s, y:(py+y0+0.5)/s, split:true, est:true});
+    }
+  }
   // trous de la pince du porte-cible : paire symétrique en haut du carton, hors du visuel
   const mmH = holes.map(h => imgToMm(cal, h.x, h.y)), drop = new Set();
   for (let i=0;i<mmH.length;i++) for (let j=i+1;j<mmH.length;j++){
@@ -854,6 +900,8 @@ function detectAndMerge(){
 function prepareNextSeries(){
   const cal = getCal(); if (!cal || !state.img) return false;
   detectHoles(true);
+  state.prevHoleGrid = state.curGrid.slice();     // trous réellement vus sur cette photo (sans les disques ci-dessous)
+  state.prevDigits = digitAngles(cal);            // orientation de la cible, pour recaler la photo suivante
   const G = GRID_N, grid = state.curGrid.slice(), rc = Math.ceil((calMm()/2 + 0.5)/GRID_C);
   currentShots().forEach(p => { const cx = Math.floor((p.x+260)/GRID_C), cy = Math.floor((-p.y+260)/GRID_C);
     for (let dy=-rc;dy<=rc;dy++) for (let dx=-rc;dx<=rc;dx++){ if (dx*dx+dy*dy > rc*rc) continue;
@@ -867,18 +915,49 @@ function prepareNextSeries(){
   return true;
 }
 // recale la nouvelle photo sur la précédente (petite rotation et décalage) grâce aux trous déjà présents
+// Orientation de la cible sur la photo : angle (°, sens trigonométrique, repère du calage) de chacun des quatre « 9 »
+// blancs imprimés sur les axes, entre 30 et 45 mm du centre. Entre deux photos de la même cible, la différence de ces
+// angles donne la rotation, même quand tous les trous sont groupés au centre (une rotation les déplace alors trop peu
+// pour être mesurée sur eux : 4 à 5° d'erreur sur la séance DDM4).
+function digitAngles(cal){
+  const img = state.img; if (!cal || !img) return null;
+  const corners = [[-46,-46],[46,-46],[-46,46],[46,46]].map(([x,y]) => mmToImg(cal, x, y));
+  const bx0 = Math.max(0, Math.floor(Math.min(...corners.map(p=>p.x)))), by0 = Math.max(0, Math.floor(Math.min(...corners.map(p=>p.y))));
+  const bx1 = Math.min(img.width-1, Math.ceil(Math.max(...corners.map(p=>p.x)))), by1 = Math.min(img.height-1, Math.ceil(Math.max(...corners.map(p=>p.y))));
+  if (bx1-bx0 < 10 || by1-by0 < 10) return null;
+  const bw = bx1-bx0+1, d = img.getContext("2d", {willReadFrequently:true}).getImageData(bx0, by0, bw, by1-by0+1).data;
+  const L = (x,y) => { const xi = Math.round(x)-bx0, yi = Math.round(y)-by0; if (xi<0||yi<0||xi>=bw||yi>by1-by0) return -1; const j = (yi*bw+xi)*4; return (d[j]*77+d[j+1]*150+d[j+2]*29)>>8; };
+  const samp = [];
+  for (const a0 of [0,90,180,270]) for (let a=a0-12; a<=a0+12; a+=0.1) for (let r=30; r<=45; r+=0.25){
+    const t = a*Math.PI/180, p = mmToImg(cal, r*Math.cos(t), r*Math.sin(t)), v = L(p.x, p.y); if (v >= 0) samp.push([a0, a, v]); }
+  if (samp.length < 1000) return null;
+  const vs = samp.map(q => q[2]).sort((x,y)=>x-y), med = vs[vs.length>>1], hi = vs[Math.floor(vs.length*0.99)];
+  if (hi - med < 60) return null;                       // pas de chiffre blanc sur fond noir (photo trop sombre, autre modèle)
+  const thr = med + 0.5*(hi - med);
+  return [0,90,180,270].map(a0 => { let sa=0, n=0; for (const [b,a,v] of samp) if (b===a0 && v > thr){ sa += a; n++; } return n >= 30 ? sa/n - a0 : null; });
+}
 function alignToPrev(){
   const pts = state.prevPts, g = state.curGrid; if (!pts || !pts.length || !g) return;
   const G = GRID_N, look = (x,y) => { const gx=Math.floor((x+260)/GRID_C), gy=Math.floor((y+260)/GRID_C); return (gx>=0&&gy>=0&&gx<G&&gy<G) ? g[gy*G+gx] : 0; };
   const score = (th, tx, ty) => { const c=Math.cos(th), sn=Math.sin(th); let n=0; for (const [x,y] of pts) n += look(c*x - sn*y + tx, sn*x + c*y + ty); return n; };
-  const s0 = score(0,0,0); let best = {v:s0, th:0, tx:0, ty:0};
-  for (let d=-5; d<=5; d+=0.5) for (let tx=-4; tx<=4; tx+=0.5) for (let ty=-4; ty<=4; ty+=0.5){
-    const v = score(d*Math.PI/180, tx, ty); if (v > best.v) best = {v, th:d*Math.PI/180, tx, ty}; }
-  const b0 = {...best};
-  for (let d=-0.5; d<=0.5; d+=0.1) for (let tx=-0.5; tx<=0.5; tx+=0.25) for (let ty=-0.5; ty<=0.5; ty+=0.25){
+  // Rotation donnée par les chiffres imprimés ; sinon, par les trous seuls. Un décalage du centre fait tourner en sens
+  // opposé deux chiffres opposés (0,5 mm ≈ 0,8° à 37,5 mm) : la moyenne d'une paire opposée ne garde que la rotation.
+  // Il faut une paire complète, et les deux paires d'accord à 1° près quand elles existent toutes les deux.
+  let thD = null;
+  const cur = digitAngles(getCal()), prv = state.prevDigits;
+  if (cur && prv){ const dd = cur.map((v,i) => v != null && prv[i] != null ? v - prv[i] : null);
+    const pairs = [[0,2],[1,3]].filter(([i,j]) => dd[i] != null && dd[j] != null).map(([i,j]) => (dd[i]+dd[j])/2);
+    if (pairs.length === 1 || (pairs.length === 2 && Math.abs(pairs[0]-pairs[1]) <= 1))
+      thD = -pairs.reduce((a,v)=>a+v,0)/pairs.length*Math.PI/180; }                   // repère des trous : y vers le bas, sens inverse
+  const s0 = score(0,0,0); let best = thD != null ? {v:score(thD,0,0), th:thD, tx:0, ty:0} : {v:s0, th:0, tx:0, ty:0};
+  const angles = thD != null ? [thD] : []; if (thD == null) for (let d=-5; d<=5; d+=0.5) angles.push(d*Math.PI/180);
+  for (const th of angles) for (let tx=-4; tx<=4; tx+=0.5) for (let ty=-4; ty<=4; ty+=0.5){
+    const v = score(th, tx, ty); if (v > best.v) best = {v, th, tx, ty}; }
+  const b0 = {...best}, dSpan = thD != null ? 0 : 0.5;        // angle des chiffres : les trous n'affinent que le décalage
+  for (let d=-dSpan; d<=dSpan+1e-9; d+=0.1) for (let tx=-0.5; tx<=0.5; tx+=0.25) for (let ty=-0.5; ty<=0.5; ty+=0.25){
     const th = b0.th + d*Math.PI/180, v = score(th, b0.tx+tx, b0.ty+ty); if (v > best.v) best = {v, th, tx:b0.tx+tx, ty:b0.ty+ty}; }
-  state.lastAlign = {rot: best.th*180/Math.PI, tx: best.tx, ty: best.ty, gain: s0 ? best.v/s0 : 0};
-  if (best.v < s0*1.05 + 5) return;
+  state.lastAlign = {rot: best.th*180/Math.PI, tx: best.tx, ty: best.ty, gain: s0 ? best.v/s0 : 0, chiffres: thD != null};
+  if (thD == null && best.v < s0*1.05 + 5) return;
   const cal = getCal(), [a,b,c,d] = cal.M, co = Math.cos(best.th), sn = Math.sin(best.th);
   const cx = cal.chx + a*best.tx + b*best.ty, cy = cal.chy + c*best.tx + d*best.ty;
   state.handles = handlesFrom(cx, cy, [a*co + b*sn, -a*sn + b*co, c*co + d*sn, -c*sn + d*co]);
@@ -1123,7 +1202,7 @@ stage.addEventListener("drop", e => { e.preventDefault(); loadFile(e.dataTransfe
 
 function setImage(canvas, isSample, next){
   state.img = canvas; state.sample = isSample; state.undo = []; $("bUndo").disabled = true;
-  if (!next){ state.curSeries = 0; state.prevGrid = null; state.prevPts = null; state.carry = null; state.a1mm = null; state.holeHue = null; state.lastAlign = null; }
+  if (!next){ state.curSeries = 0; state.prevGrid = null; state.prevHoleGrid = null; state.prevDigits = null; state.prevPts = null; state.carry = null; state.a1mm = null; state.holeHue = null; state.lastAlign = null; }
   $("badge").hidden = !isSample && !next;
   $("badge").textContent = isSample ? "Exemple · importe ta photo" : `Série ${state.curSeries+1}`;
   const ok = calibrate(), doute = ok && state.calSuspect;
@@ -1160,11 +1239,14 @@ function refresh(){
   let info = (state.curSeries ? `Série ${state.curSeries+1} · ` : "") + st.n + (st.n>1?" impacts":" impact");
   if (ld) info += ` · ${ld.blobs} trous · ${state.detectMode==="couleur"?"trou modèle":"auto"}`;
   const nCur = state.holes.filter(h => (h.s||0) === state.curSeries).length, miss = nS ? nS - nCur : 0;
+  const nEst = state.holes.filter(h => (h.s||0) === state.curSeries && h.est).length;
+  if (nEst) info += ` · ${nEst} estimé${nEst>1?"s":""}`;
   if (miss) info += miss > 0 ? ` · ${miss} non localisé${miss>1?"s":""}` : ` · ${-miss} de trop`;
   const mm_ = $("missMsg");
-  mm_.className = "msg"; mm_.textContent = miss > 0
+  const estTxt = nEst ? `${nEst} coup${nEst>1?"s":""} tombé${nEst>1?"s":""} dans une déchirure : position estimée d'après ce qu'elle a gagné depuis la photo précédente (cercle${nEst>1?"s":""} en pointillé). Vérifie-${nEst>1?"les":"le"} sur la cible et déplace-${nEst>1?"les":"le"} si besoin. ` : "";
+  mm_.className = "msg"; mm_.textContent = estTxt + (miss > 0
     ? `${miss} coup${miss>1?"s":""} sur ${nS} sans trou propre : ${miss>1?"ils sont passés":"il est passé"} dans un trou existant. ${miss>1?"Ils ne sont pas comptés":"Il n'est pas compté"} : ajoute-${miss>1?"les":"le"} à la main si tu sais où.`
-    : miss < 0 ? `${-miss} impact${miss<-1?"s":""} de plus que les ${nS} coups annoncés : supprime les fausses détections.` : "";
+    : miss < 0 ? `${-miss} impact${miss<-1?"s":""} de plus que les ${nS} coups annoncés : supprime les fausses détections.` : "");
   $("pickTxt").textContent = state.holeHue != null ? "Revenir en auto" : "Trou modèle";
   $("nInfo").textContent = info;
   $("hueSw").style.background = state.detectMode==="couleur" && state.holeHueUsed!=null ? `hsl(${state.holeHueUsed} 55% 45%)` : "transparent";
@@ -1275,7 +1357,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v12");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v13");
     renderHistory();
   }
 }
