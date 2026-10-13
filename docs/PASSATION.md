@@ -158,6 +158,23 @@ de la position notée par l'utilisateur.
 **Rotation entre photos fausse de 4 à 5°.** Avec des trous tous près du centre, une rotation les déplace trop peu
 pour être mesurée sur eux. Les quatre « 9 » imprimés la donnent à 0,02° près (essai sur une photo tournée de 3°).
 
+## La séance du 11/10/2026 (9 mm, 25 m) : premier banc d'essai
+
+P320, Magtech 124 gr, 25 m, deux mains debout, 30 coups : 10, puis quatre séries de 5. Photos dans `tests/photos/`,
+reçues sans métadonnées. Vérité terrain : les positions de la sauvegarde `.json` de l'utilisateur, après ses
+corrections au stand (`tests/verite-2026-10-11.json`). Son total : 72, 40, 37, 43, 39 = 231.
+
+Résultat de la v14 : 28 coups sur 30 retrouvés à 3 mm dans la bonne série, 4 impacts en trop, 248 points. Les deux
+coups manqués (série 1 dans le 7 en haut à gauche, série 3 dans le 7 en haut à droite) sont des trous du visuel
+noir vus une série trop tard. Le fond vu à travers était brun-gris, de la luminance du carton noir (écart de −1 à
+−13) : seul un écart de teinte les trahit, juste sous le seuil (33 pour 34). Le reste en découle : faute de trouver
+le coup annoncé, l'appli découpe à tort un trou voisin, puis compte le trou en retard dans une série suivante.
+
+Mesure de la teinte : indice de chaleur (bleu en moins + rouge en plus par rapport au carton) de 11 à 15 dans les
+trous ratés, sous 10 sur le carton noir intact (sous 8 dans 99,9 % des pixels). Essai d'un critère « chaleur ≥ 10
+dans le noir » : série 2 parfaite, mais un faux impact sur un chiffre « 8 », un trou du groupe perdu et le trou de
+la série 3 toujours raté, soit 26 sur 30. Non retenu. Piste pratique sans code : un fond clair derrière la cible.
+
 ## Pistes d'évolution
 
 L'utilisateur a dit avoir des idées d'évolution sans les avoir encore détaillées : demande-les lui avant de
@@ -165,7 +182,8 @@ proposer les tiennes. Ce qui a été évoqué ou qui découle des limites :
 
 - Tester le .300 Win Mag (100 et 200 m), le .300 BLK subsonique (trous ovales possibles) et la C50 à 10 noir.
 - Cibles vierges des deux modèles, promises par l'utilisateur : test « zéro impact » et calage du modèle à 10 noir.
-- Enrichir le jeu de tests à chaque nouvelle séance réelle, avec le comptage manuel de l'utilisateur.
+- Enrichir le banc d'essai à chaque séance réelle : photos + sauvegarde `.json` (vérité terrain), puis régler la détection
+  des trous sur fond sombre sur l'ensemble des séances.
 - Découper `index.html` en modules, une fois les tests en place, sans changer le déploiement.
 - Carte cumulée des coups écartés sur toutes les séances, pour repérer une faute récurrente.
 - Synchronisation de l'historique entre téléphone et PC, aujourd'hui remplacée par l'export `.json`.

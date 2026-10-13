@@ -30,8 +30,9 @@ pas à pas, sans jargon, et propose toujours le chemin le plus simple.
 | `sw.js` | Service worker : cache pour le fonctionnement hors ligne. |
 | `manifest.webmanifest`, `icon-*.png`, `apple-touch-icon.png` | Installation comme appli (PWA). |
 | `tests/detection.test.cjs` | Test de non-régression de la détection. |
-| `tests/photos/` | Séances réelles : 02/10/2026 (9 mm, 10 m, 3 photos), 04/10/2026 (9 mm, 25 m, 2 photos, plus deux recadrages pour le calage), DDM4 .300 BLK (25 m, 3 photos de 5 coups ; la série 1 porte les annotations au pied à coulisse de l'utilisateur). |
+| `tests/photos/` | Séances réelles : 02/10/2026 (9 mm, 10 m, 3 photos), 04/10/2026 (9 mm, 25 m, 2 photos, plus deux recadrages pour le calage), DDM4 .300 BLK (25 m, 3 photos de 5 coups ; la série 1 porte les annotations au pied à coulisse de l'utilisateur), 11/10/2026 (9 mm, 25 m, 5 photos : 10 + 5 + 5 + 5 + 5 coups). |
 | `tests/attendu*.json` | Résultats de référence, vérifiés sur l'image et contre le comptage de l'utilisateur. |
+| `tests/verite-*.json` | Vérité terrain : positions de l'utilisateur après correction, tirées de sa sauvegarde `.json`. Base du banc d'essai. |
 | `docs/PASSATION.md` | Historique, mesures au pied à coulisse, décisions et pistes. |
 
 ## Mise en ligne
@@ -114,6 +115,12 @@ Il rejoue aussi la séance du 04/10/2026 (25 m) : 10 puis 10 impacts, 70 + 74 = 
 DDM4 .300 BLK (25 m, 5 + 5 + 5) : 15 coups, 50, 50 et 49 points, égal au comptage de l'utilisateur à la
 jauge (149), dont 5 coups placés dans des déchirures ; et le calage sur deux recadrages qui le faisaient
 échouer en v11.
+
+**Banc d'essai (vérité terrain).** Pour la séance du 11/10/2026, le test compare aussi l'appli aux 30 positions
+corrigées par l'utilisateur (`tests/verite-2026-10-11.json`) : coups retrouvés à 3 mm dans la bonne série, et
+impacts en trop. Niveau de la v14 : 28 sur 30, 4 en trop. Le plancher échoue si l'on recule ; quand une
+amélioration le dépasse, relève-le. Chaque nouvelle séance avec photos et sauvegarde `.json` s'ajoute de la
+même façon : c'est sur l'ensemble des séances qu'on règle la détection, jamais sur une seule.
 Dans la session cloud, si Playwright ne trouve pas son navigateur, lance le test avec
 `PW_CHROMIUM=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm test`. N'utilise `--record` qu'après avoir regardé le résultat sur l'image :
 réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
@@ -131,6 +138,9 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
   .300 Win Mag, en subsonique, au-delà de 25 m, ni sur le modèle de C50 à 10 noir.
 - Au .300 BLK, le trou visible est plus petit que l'ogive (5,6 à 7,8 mm pour 7,82 mm) : près d'un cordon,
   le comptage à l'œil peut donner un point de moins que la jauge et que l'appli.
+- Fond sombre derrière la cible : à travers un trou du visuel noir, il peut avoir la luminance du carton.
+  Le trou ne se distingue plus que par sa teinte, plus chaude, et passe sous le seuil (11/10 : deux trous
+  vus une série trop tard). Un critère de teinte essayé seul a fait pire (26 sur 30) : à régler sur plusieurs séances.
 - La détection reste sensible à de petits écarts de calage : un décalage de quelques dixièmes de mm
   suffit à faire apparaître un fragment de chiffre ou à changer le découpage d'une déchirure.
 - La rotation de la première photo n'est pas corrigée (seule la rotation entre photos d'une série l'est) :
