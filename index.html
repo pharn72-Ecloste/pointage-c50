@@ -1442,7 +1442,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v16");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v17");
     renderHistory();
   }
 }
@@ -1519,6 +1519,8 @@ function renderHistory(){
   renderDetail();
 }
 // comparaison des munitions : écart-type radial mis en commun, en MOA pour mélanger les distances
+// Comparaison des munitions : seulement entre séances d'une même arme et d'un même tireur. Comparer une carabine en
+// appui à un pistolet tenu à la main, ou deux tireurs entre eux, mesurerait l'arme ou le tireur, pas la munition.
 function pooledByMun(list){
   const g = new Map();
   list.forEach(st => { const s = st.s, k = s.mun || "(non renseignée)"; if (st.n < 2 || !(s.distanceM > 0)) return;
@@ -1526,17 +1528,25 @@ function pooledByMun(list){
     e.sessions++; e.n += st.n; e.pts += st.total; e.df += st.n-1; e.ssx += (st.n-1)*(st.sdx*f)**2; e.ssy += (st.n-1)*(st.sdy*f)**2; g.set(k, e); });
   return [...g.values()].map(e => { const sd = Math.sqrt(e.ssx/e.df + e.ssy/e.df); return {...e, sd, ci: sigmaCI(sd, 2*e.df), avg: e.pts/e.n}; }).sort((a,b)=>a.sd-b.sd);
 }
+function compareGroups(list){
+  const g = new Map();
+  list.forEach(st => { const arme = (st.s.arme || "").trim() || "(arme non renseignée)", k = tireurOf(st.s) + "\u0001" + arme;
+    if (!g.has(k)) g.set(k, {tireur: tireurOf(st.s), arme, list: []}); g.get(k).list.push(st); });
+  return [...g.values()].map(x => ({...x, rows: pooledByMun(x.list)})).filter(x => x.rows.length >= 2);
+}
 function renderCompare(list){
-  const box = $("cmpBox"), rows = pooledByMun(list);
-  if (rows.length < 2){ box.innerHTML = ""; return; }
-  const best = rows[0];
+  const box = $("cmpBox"), groups = compareGroups(list);
+  if (!groups.length){ box.innerHTML = ""; return; }
+  const plusieurs = new Set(groups.map(x => x.tireur)).size > 1;
   box.innerHTML = `<div style="padding:0 12px 12px"><h2 style="font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.08em;text-transform:uppercase;margin:4px 0 8px;color:var(--ink-2)">Comparer les munitions</h2>
-    <div class="tablewrap"><table class="hist" style="cursor:default"><thead><tr><th>Munition</th><th>Séances</th><th>Coups</th><th><i class="sg">σ</i>R MOA</th><th>Fourchette 95 %</th><th>Moy./coup</th><th>Verdict</th></tr></thead><tbody>
-    ${rows.map((r,i) => { const worse = i>0 && r.ci && best.ci && r.ci[0] > best.ci[1];
-      const verdict = i===0 ? "la plus précise" : worse ? "nettement moins précise" : "pas de différence démontrée";
-      return `<tr style="cursor:default"><td style="font-family:var(--body)">${esc(r.mun)}</td><td>${r.sessions}</td><td>${r.n}</td><td>${fmt(r.sd,2)}</td><td>${r.ci?fmt(r.ci[0],2)+"–"+fmt(r.ci[1],2):"–"}</td><td>${fmt(r.avg,2)}</td><td style="font-family:var(--body);color:${worse?"var(--crit)":i===0?"var(--good)":"var(--ink-2)"}">${verdict}</td></tr>`; }).join("")}
-    </tbody></table></div>
-    <p class="note">Écart-type radial mis en commun sur toutes les séances de chaque munition, converti en MOA pour comparer des distances différentes. « Pas de différence démontrée » veut dire que les fourchettes se chevauchent : tire davantage avant de conclure.</p></div>`;
+    ${groups.map(grp => { const rows = grp.rows, best = rows[0];
+      return `<h3 style="font-family:var(--body);font-weight:600;font-size:13px;margin:10px 0 6px">${esc(grp.arme)}${plusieurs ? ` · ${esc(grp.tireur)}` : ""}</h3>
+      <div class="tablewrap"><table class="hist" style="cursor:default"><thead><tr><th>Munition</th><th>Séances</th><th>Coups</th><th><i class="sg">σ</i>R MOA</th><th>Fourchette 95 %</th><th>Moy./coup</th><th>Verdict</th></tr></thead><tbody>
+      ${rows.map((r,i) => { const worse = i>0 && r.ci && best.ci && r.ci[0] > best.ci[1];
+        const verdict = i===0 ? "la plus précise" : worse ? "nettement moins précise" : "pas de différence démontrée";
+        return `<tr style="cursor:default"><td style="font-family:var(--body)">${esc(r.mun)}</td><td>${r.sessions}</td><td>${r.n}</td><td>${fmt(r.sd,2)}</td><td>${r.ci?fmt(r.ci[0],2)+"–"+fmt(r.ci[1],2):"–"}</td><td>${fmt(r.avg,2)}</td><td style="font-family:var(--body);color:${worse?"var(--crit)":i===0?"var(--good)":"var(--ink-2)"}">${verdict}</td></tr>`; }).join("")}
+      </tbody></table></div>`; }).join("")}
+    <p class="note">Les munitions ne sont comparées qu'entre séances d'une même arme et d'un même tireur. Écart-type radial mis en commun sur toutes les séances de chaque munition, converti en MOA pour comparer des distances différentes. « Pas de différence démontrée » veut dire que les fourchettes se chevauchent : tire davantage avant de conclure. Au pistolet tenu à la main, la dispersion vient surtout du tireur : pour juger une munition, tire-la en appui stable.</p></div>`;
 }
 const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
 const fmtDate = d => { const [y,m,j] = String(d).split("-"); return j ? `${j}/${m}/${y}` : d; };
