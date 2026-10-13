@@ -20,7 +20,7 @@ Son matériel et ses habitudes :
   sur le porte-cible, avec le vide du pas de tir derrière.
 - Téléphone Android et PC Windows 10. L'appli est installée depuis Chrome.
 
-## Ce que fait l'application (version 17)
+## Ce que fait l'application (version 18)
 
 - Calage automatique de la cible, avec correction de perspective, et poignées de réglage manuel.
 - Détection des impacts, correction à la main : ajouter, supprimer, déplacer, annuler.
@@ -47,6 +47,11 @@ Son matériel et ses habitudes :
   le P320 tenu à la main et la DDM4 en appui : il mesurait l'arme et le tireur, pas la munition. Sur les 170 coups
   Magtech au P320 (6 séances, 10 à 25 m), la dispersion reste vers 10 MOA quelle que soit la distance : elle vient
   surtout du tireur, et une munition de pistolet se juge en appui stable.
+- Moyenne glissante sur la courbe (v18) : pour les courbes d'écart-type radial, un pointillé donne l'écart-type mis
+  en commun sur les 3 dernières séances (tous leurs coups). Il ne s'affiche que pour un même tireur et une même arme,
+  et en mm pour une même distance : en mm, mêler 10 et 25 m faisait monter la courbe sans que le tir change. Un cumul
+  depuis la première séance a été écarté : il devient inerte et cache les progrès. L'info-bulle reste dans le cadre
+  et touche aussi le premier et le dernier point.
 
 ## Les mesures de terrain
 
