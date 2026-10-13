@@ -43,8 +43,8 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v16` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v16`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v17` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v17`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,

@@ -20,7 +20,7 @@ Son matériel et ses habitudes :
   sur le porte-cible, avec le vide du pas de tir derrière.
 - Téléphone Android et PC Windows 10. L'appli est installée depuis Chrome.
 
-## Ce que fait l'application (version 16)
+## Ce que fait l'application (version 17)
 
 - Calage automatique de la cible, avec correction de perspective, et poignées de réglage manuel.
 - Détection des impacts, correction à la main : ajouter, supprimer, déplacer, annuler.
@@ -42,6 +42,11 @@ Son matériel et ses habitudes :
   Les statistiques « Tous » mélangent les tireurs : filtrer sur un tireur pour lire les siennes.
 - Valeur du clic par arme (v16) : choisir une arme remet sa valeur et son unité ; modifier la valeur l'enregistre
   dans l'arme choisie. À la mise à jour, l'ancienne valeur commune est allée à l'arme réglée à ce moment-là.
+- Comparaison des munitions par arme (v17) : un tableau par arme (et par tireur s'il y en a plusieurs), qui
+  n'apparaît que si cette arme a été tirée avec au moins deux munitions. Avant, le tableau mettait côte à côte
+  le P320 tenu à la main et la DDM4 en appui : il mesurait l'arme et le tireur, pas la munition. Sur les 170 coups
+  Magtech au P320 (6 séances, 10 à 25 m), la dispersion reste vers 10 MOA quelle que soit la distance : elle vient
+  surtout du tireur, et une munition de pistolet se juge en appui stable.
 
 ## Les mesures de terrain
 
