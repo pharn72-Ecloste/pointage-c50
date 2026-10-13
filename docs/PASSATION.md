@@ -20,7 +20,7 @@ Son matériel et ses habitudes :
   sur le porte-cible, avec le vide du pas de tir derrière.
 - Téléphone Android et PC Windows 10. L'appli est installée depuis Chrome.
 
-## Ce que fait l'application (version 13)
+## Ce que fait l'application (version 14)
 
 - Calage automatique de la cible, avec correction de perspective, et poignées de réglage manuel.
 - Détection des impacts, correction à la main : ajouter, supprimer, déplacer, annuler.
@@ -34,6 +34,8 @@ Son matériel et ses habitudes :
 - Carnet : arme, munition ou recette, position, vitesse au chronographe, note.
 - Historique : courbe d'évolution, filtres, comparaison des munitions, export CSV,
   sauvegarde et restauration en `.json`.
+- Fiche d'une séance enregistrée : munition ou recette, position, vitesse, écart-type et note restent modifiables
+  (v14). Calibre, distance et impacts restent figés : ils fixent les points et les MOA.
 
 ## Les mesures de terrain
 
