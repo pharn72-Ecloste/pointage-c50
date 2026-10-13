@@ -1357,7 +1357,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v13");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v14");
     renderHistory();
   }
 }
@@ -1391,7 +1391,7 @@ async function saveSession(){
 $("bSave").onclick = saveSession;
 
 function sessionStats(s){ const st = computeStats(toPts(s.shots), s.caliberMm, s.distanceM); st.s = s; return st; }
-let selectedId = null, confirmDel = false;
+let selectedId = null, confirmDel = false, editInfo = false;
 function fillSelect(el, values, label){
   const cur = el.value; el.innerHTML = `<option value="">${label}</option>` + values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
   if (values.map(String).includes(cur)) el.value = cur;
@@ -1426,7 +1426,7 @@ function renderHistory(){
   $("histBody").innerHTML = list.slice().reverse().map(st => { const s = st.s;
     return `<tr data-id="${esc(s.id)}" aria-selected="${s.id===selectedId}"><td>${fmtDate(s.date)}</td><td>${esc(s.arme)}</td><td>${esc(s.mun||"–")}</td><td>${s.distanceM} m</td><td>${st.n}</td><td>${st.total}</td><td>${st.n?fmt(st.avg,2):"–"}</td><td>${fmt(st.sdx,1)}</td><td>${fmt(st.sdy,1)}</td><td>${fmt(st.sdr,1)}</td><td>${fmt(st.toMoa(st.sdr),2)}</td><td>${fmt(st.off,1)}</td><td>${(()=>{const f=analyzeFliers(toPts(s.shots), s.caliberMm, s.distanceM, $("fHand").value); return f?f.fliers.length:"–";})()}</td></tr>`;
   }).join("") || `<tr><td colspan="13" class="empty" style="font-family:var(--body)">Aucune séance enregistrée pour ce filtre. Analyse une cible puis « Enregistrer dans l'historique ».</td></tr>`;
-  document.querySelectorAll("#histBody tr[data-id]").forEach(tr => tr.onclick = () => { selectedId = selectedId===tr.dataset.id ? null : tr.dataset.id; confirmDel=false; renderHistory(); });
+  document.querySelectorAll("#histBody tr[data-id]").forEach(tr => tr.onclick = () => { selectedId = selectedId===tr.dataset.id ? null : tr.dataset.id; confirmDel=false; editInfo=false; renderHistory(); });
   renderDetail();
 }
 // comparaison des munitions : écart-type radial mis en commun, en MOA pour mélanger les distances
@@ -1535,18 +1535,38 @@ function renderDetail(){
     </tbody></table>
     ${st.sdrCI?`<p class="note">Fourchette 95 % de l'écart-type radial : ${fmt(st.sdrCI[0],1)}–${fmt(st.sdrCI[1],1)} mm.</p>`:""}
     <div id="dSer" hidden style="margin-top:10px"><table class="disp"><thead><tr><th>Série</th><th>Coups</th><th>Pts</th><th>Moy.</th><th><i class="sg">σ</i>R mm</th><th>PMI x</th><th>PMI y</th></tr></thead><tbody id="dSerBody"></tbody></table><div class="msg" id="dSerMsg"></div></div>
-    <div class="row" style="margin-top:12px">${confirmDel
+    ${editInfo ? `<div class="fields" style="margin-top:12px">
+      <div class="field full"><label for="eMun">Munition ou recette</label><input id="eMun" list="munList" value="${esc(s.mun||"")}"></div>
+      <div class="field"><label for="ePos">Position</label><select id="ePos">${[...new Set([...[...$("fPos").options].map(o=>o.value), s.pos||""])].filter(Boolean).map(v=>`<option${v===(s.pos||"")?" selected":""}>${esc(v)}</option>`).join("")}</select></div>
+      <div class="field"><label for="eV0">Vitesse moy. (m/s)</label><input id="eV0" type="number" inputmode="decimal" min="0" value="${s.v0!=null?s.v0:""}"></div>
+      <div class="field"><label for="eVsd">Écart-type vitesse</label><input id="eVsd" type="number" inputmode="decimal" min="0" value="${s.vsd!=null?s.vsd:""}"></div>
+      <div class="field full"><label for="eNote">Note</label><input id="eNote" value="${esc(s.note||"")}"></div>
+      <div class="row full" style="grid-column:1/-1"><button class="btn primary" id="bInfoOk">Enregistrer les modifications</button><button class="btn ghost" id="bInfoNo">Annuler</button></div>
+      <div class="msg full" id="infoMsg" style="grid-column:1/-1"></div></div>` : ""}
+    <div class="row" style="margin-top:12px">${editInfo ? "" : `<button class="btn" id="bInfo">Modifier les informations</button>`}${confirmDel
       ? `<span>Supprimer définitivement cette séance ?</span><button class="btn danger" id="bDelYes">Supprimer</button><button class="btn ghost" id="bDelNo">Garder</button>`
       : `<button class="btn danger" id="bDel">Supprimer la séance</button>`}</div>
   </div></div>`;
   renderSeries(toPts(s.shots), s.shots.map(p=>p[2]||0), s.caliberMm, s.distanceM, $("dSer"), $("dSerBody"), $("dSerMsg"));
+  // munition, position, chronographe et note restent modifiables après l'enregistrement : une faute de saisie ne
+  // demande pas de refaire la détection. Calibre, distance et impacts ne changent pas (ils fixent points et MOA).
+  if ($("bInfo")) $("bInfo").onclick = () => { editInfo = true; confirmDel = false; renderDetail(); };
+  if ($("bInfoNo")) $("bInfoNo").onclick = () => { editInfo = false; renderDetail(); };
+  if ($("bInfoOk")) $("bInfoOk").onclick = async () => {
+    const upd = {mun: $("eMun").value.trim(), pos: $("ePos").value, v0: +$("eV0").value || null, vsd: +$("eVsd").value || null, note: $("eNote").value.trim()};
+    try {
+      if (store.kind === "db"){ const doc = {...s, ...upd}; delete doc.id; await store.db.collection("seances").doc(s.id).set(doc); }
+      else { Object.assign(s, upd); ls.set("c50_seances", store.sessions); }
+      editInfo = false; renderHistory();
+    } catch(e){ const m = $("infoMsg"); if (m){ m.className = "msg err full"; m.textContent = "Échec de l'enregistrement des modifications. Réessaie."; } }
+  };
   if ($("bDel")) $("bDel").onclick = () => { confirmDel = true; renderDetail(); };
   if ($("bDelNo")) $("bDelNo").onclick = () => { confirmDel = false; renderDetail(); };
   if ($("bDelYes")) $("bDelYes").onclick = async () => {
     try {
       if (store.kind === "db") await store.db.doc("seances/" + s.id).delete();
       else { store.sessions = store.sessions.filter(x=>x.id!==s.id); ls.set("c50_seances", store.sessions); }
-      selectedId = null; confirmDel = false; renderHistory();
+      selectedId = null; confirmDel = false; editInfo = false; renderHistory();
     } catch(e){ confirmDel = false; renderDetail(); }
   };
 }
