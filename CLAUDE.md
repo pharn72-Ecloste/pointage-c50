@@ -43,14 +43,18 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v14` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v14`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v15` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v15`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,
-`c50_hmetric`). **Ne change jamais leur format sans conserver la lecture de l'ancien** : il n'existe
+`c50_hmetric`, et depuis la v15 `c50_tireurs` : la liste des tireurs et de leurs armes). **Ne change jamais leur format sans conserver la lecture de l'ancien** : il n'existe
 aucune autre copie que les sauvegardes `.json` que l'utilisateur fait à la main. Une séance contient
 `shots: [[x, y, série, pointsCorrigés?], …]` en millimètres, origine au centre, y vers le haut.
+Depuis la v15, une séance peut porter `tireur` : le nom d'un autre tireur. Les séances du propriétaire du
+téléphone (le premier de `c50_tireurs`) n'ont **pas** ce champ, celles d'avant la v15 non plus : elles suivent son
+nom même s'il le renomme. « Restaurer » reprend ses propres séances ; « Importer un tireur » range la sauvegarde
+d'un autre tireur à son nom, avec des identifiants préfixés `t-<nom>-` pour ne jamais se mélanger aux siennes.
 
 Le même `index.html` a aussi tourné comme page hébergée par Claude, où `window.claude.use("db")`
 et `use("downloads")` existent. En version autonome `window.claude` est absent : l'historique passe

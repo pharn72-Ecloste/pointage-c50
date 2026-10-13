@@ -88,6 +88,8 @@ button,select,input{font:inherit;color:inherit}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .chip{border:1px solid var(--line-2);background:var(--surface-2);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:500;cursor:pointer}
 .chip[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
+.chipx{margin-left:7px;font-weight:700;opacity:.5;cursor:pointer;padding:0 2px}
+.chipx:hover{opacity:1;color:var(--accent)}
 .score{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
 .score .big{font-family:var(--display);font-weight:700;font-size:64px;line-height:.85;font-variant-numeric:tabular-nums}
 .score .of{font-family:var(--mono);color:var(--muted);font-size:13px;padding-bottom:4px}
@@ -213,11 +215,14 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
       <div class="side">
         <div class="card sec">
           <h2>Arme et distance</h2>
-          <div class="chips" id="presets">
-            <button class="chip" data-p="p320">P320 · 9 mm</button>
-            <button class="chip" data-p="wm">Bergara · .300 WM</button>
-            <button class="chip" data-p="blk">DDM4 300S · .300 BLK</button>
+          <div class="fields" style="margin-bottom:8px">
+            <div class="field full"><label for="fTireur">Tireur</label>
+              <div class="row" style="gap:6px;flex-wrap:nowrap"><select id="fTireur" style="flex:1;min-width:0"></select><button class="btn ghost" id="bTirRen" title="Renommer ce tireur">Renommer</button></div></div>
+            <div class="field full" id="tirEdit" hidden><label for="fTirNom" id="tirEditLbl">Nom du nouveau tireur</label>
+              <div class="row" style="gap:6px;flex-wrap:nowrap"><input id="fTirNom" style="flex:1;min-width:0" maxlength="40"><button class="btn primary" id="bTirOk">OK</button><button class="btn ghost" id="bTirNo">Annuler</button></div>
+              <div class="msg" id="tirMsg"></div></div>
           </div>
+          <div class="chips" id="presets"></div>
           <div class="fields">
             <div class="field full"><label for="fArme">Arme</label><input id="fArme" list="armeList" placeholder="ex. P320 X-Five Legion"><datalist id="armeList"></datalist></div>
             <div class="field"><label for="fCal">Calibre (Ø trou)</label>
@@ -301,6 +306,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
   <section id="view-hi" hidden>
     <div class="card">
       <div class="hfilters">
+        <div class="field"><label for="hTireur">Tireur</label><select id="hTireur"></select></div>
         <div class="field"><label for="hArme">Arme</label><select id="hArme"></select></div>
         <div class="field"><label for="hDist">Distance</label><select id="hDist"></select></div>
         <div class="field"><label for="hMun">Munition</label><select id="hMun"></select></div>
@@ -315,10 +321,16 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
         <span style="flex:1"></span>
         <button class="btn" id="bExport">Exporter CSV</button>
         <button class="btn" id="bBackup" title="Toutes les séances, pour les transférer vers un autre appareil">Sauvegarder (.json)</button>
-        <label class="btn" for="fRestore">Restaurer</label>
+        <label class="btn" for="fRestore" title="Tes propres séances, depuis une de tes sauvegardes">Restaurer</label>
         <input id="fRestore" type="file" accept=".json,application/json" hidden>
+        <label class="btn" for="fImportT" title="Les séances d'un autre tireur, à partir de sa sauvegarde .json : elles restent à son nom">Importer un tireur</label>
+        <input id="fImportT" type="file" accept=".json,application/json" hidden>
       </div>
       <div class="msg" id="restoreMsg" style="padding:0 12px"></div>
+      <div id="importBox" hidden style="padding:8px 12px 12px;border-bottom:1px solid var(--line)">
+        <p class="note" style="margin:0 0 8px" id="importInfo"></p>
+        <div class="row" style="gap:6px;flex-wrap:wrap"><input id="fImpNom" placeholder="Nom du tireur" maxlength="40" style="flex:1;min-width:160px"><button class="btn primary" id="bImpOk">Importer à ce nom</button><button class="btn ghost" id="bImpNo">Annuler</button></div>
+      </div>
       <div id="exportArea" hidden style="padding:12px;border-bottom:1px solid var(--line)">
         <p class="note" style="margin-top:0" id="exportLbl">Le téléchargement direct n'est pas disponible ici. Copie ce texte dans un fichier :</p>
         <textarea class="exportbox" id="exportTxt" readonly></textarea>
@@ -1322,23 +1334,82 @@ $("shotBody").addEventListener("click", e => {
 });
 ["fCal","fDist","fClick","fUnit","fHand"].forEach(id => $(id).addEventListener("input", () => { saveSettings(); refresh(); }));
 $("fArme").addEventListener("input", () => { saveSettings(); markPreset(); });
+$("fCal").addEventListener("change", markPreset);
 ["fMun","fPos"].forEach(id => $(id).addEventListener("change", saveSettings));
 
+// ---------- tireurs et armes ----------
+// c50_tireurs : [{nom, armes:[{arme, cal, dist}]}]. Le premier est le propriétaire du téléphone : ses séances n'ont
+// pas de champ « tireur » (celles d'avant la v15 non plus), elles suivent son nom même s'il le renomme.
+// Les séances des autres tireurs portent s.tireur = leur nom.
 const PRESETS = {
   p320: {arme:"P320 X-Five Legion", cal:"9.0", dist:25, click:"", unit:"mrad"},
   wm:   {arme:"Bergara Wilderness Thumbhole", cal:"7.82", dist:100, click:"", unit:"mrad"},
   blk:  {arme:"Daniel Defense DDM4 300S", cal:"7.82|blk", dist:50, click:"", unit:"mrad"}
 };
-function markPreset(){ document.querySelectorAll("#presets .chip").forEach(b => b.setAttribute("aria-pressed", PRESETS[b.dataset.p].arme === $("fArme").value)); }
-document.querySelectorAll("#presets .chip").forEach(b => b.onclick = () => {
-  const p = PRESETS[b.dataset.p]; $("fArme").value=p.arme; $("fCal").value=p.cal; $("fDist").value=p.dist; $("fClick").value=p.click; $("fUnit").value=p.unit;
-  saveSettings(); markPreset(); refresh();
-});
-function saveSettings(){ ls.set("c50_settings", {mun:$("fMun").value, pos:$("fPos").value, hand:$("fHand").value, arme:$("fArme").value, cal:$("fCal").value, dist:$("fDist").value, click:$("fClick").value, unit:$("fUnit").value}); }
+let tireurs = ls.get("c50_tireurs", null);
+if (!Array.isArray(tireurs) || !tireurs.length || !tireurs.every(t => t && typeof t.nom === "string" && Array.isArray(t.armes)))
+  tireurs = [{nom:"Moi", armes: Object.values(PRESETS).map(p => ({arme:p.arme, cal:p.cal, dist:p.dist}))}];
+let curTireur = 0;                                    // index dans tireurs
+const saveTireurs = () => ls.set("c50_tireurs", tireurs);
+const ownerName = () => tireurs[0].nom;
+const tireurOf = s => (s && s.tireur) || ownerName();
+const calLabel = v => { const o = [...$("fCal").options].find(o => o.value === v); return o ? o.textContent.split(" · ")[0] : v; };
+function renderTireurs(){
+  $("fTireur").innerHTML = tireurs.map((t,i) => `<option value="${i}">${esc(t.nom)}${i===0?" (ce téléphone)":""}</option>`).join("") + `<option value="new">＋ Nouveau tireur…</option>`;
+  $("fTireur").value = String(curTireur);
+  renderPresets();
+}
+function renderPresets(){
+  const t = tireurs[curTireur];
+  $("presets").innerHTML = t.armes.map((a,i) => `<span class="chip" role="button" tabindex="0" data-i="${i}">${esc(a.arme)} · ${esc(calLabel(a.cal))}<b class="chipx" data-x="${i}" title="Retirer cette arme" aria-label="Retirer">×</b></span>`).join("")
+    + `<button class="chip" id="bArmeAdd" title="Garde l'arme, le calibre et la distance saisis ci-dessous dans la liste de ce tireur">＋ Ajouter cette arme</button>`;
+  $("presets").querySelectorAll(".chip[data-i]").forEach(c => c.onclick = e => {
+    if (e.target.dataset.x != null){ const a = t.armes[+e.target.dataset.x];
+      if (confirm(`Retirer « ${a.arme} » de la liste de ${t.nom} ? Les séances déjà enregistrées ne changent pas.`)){ t.armes.splice(+e.target.dataset.x, 1); saveTireurs(); renderPresets(); }
+      return; }
+    const a = t.armes[+c.dataset.i]; $("fArme").value = a.arme; $("fCal").value = a.cal; if (a.dist) $("fDist").value = a.dist;
+    saveSettings(); markPreset(); refresh();
+  });
+  $("bArmeAdd").onclick = () => { const arme = $("fArme").value.trim(); if (!arme){ $("fArme").focus(); return; }
+    const a = {arme, cal: $("fCal").value, dist: +$("fDist").value || 25}, k = t.armes.findIndex(x => x.arme === arme && x.cal === a.cal);
+    if (k >= 0) t.armes[k] = a; else t.armes.push(a); saveTireurs(); renderPresets(); };
+  markPreset();
+}
+function markPreset(){ const t = tireurs[curTireur]; document.querySelectorAll("#presets .chip[data-i]").forEach(b => { const a = t.armes[+b.dataset.i]; b.setAttribute("aria-pressed", a.arme === $("fArme").value && a.cal === $("fCal").value); }); }
+function selectTireur(i){
+  curTireur = Math.max(0, Math.min(tireurs.length-1, i)); const a = tireurs[curTireur].armes[0];
+  if (a){ $("fArme").value = a.arme; $("fCal").value = a.cal; if (a.dist) $("fDist").value = a.dist; }
+  saveSettings(); renderTireurs(); refresh();
+}
+let tirEditMode = null;                               // "new" ou "ren"
+function openTirEdit(mode){ tirEditMode = mode; $("tirEdit").hidden = false; $("tirMsg").textContent = "";
+  $("tirEditLbl").textContent = mode === "new" ? "Nom du nouveau tireur" : "Nouveau nom";
+  $("fTirNom").value = mode === "new" ? "" : tireurs[curTireur].nom; $("fTirNom").focus(); }
+$("fTireur").onchange = () => { if ($("fTireur").value === "new"){ $("fTireur").value = String(curTireur); openTirEdit("new"); } else selectTireur(+$("fTireur").value); };
+$("bTirRen").onclick = () => openTirEdit("ren");
+$("bTirNo").onclick = () => { $("tirEdit").hidden = true; tirEditMode = null; };
+$("bTirOk").onclick = async () => {
+  const nom = $("fTirNom").value.trim().replace(/\s+/g, " "), msg = $("tirMsg");
+  if (!nom){ msg.className = "msg err"; msg.textContent = "Indique un nom."; return; }
+  if (tireurs.some((t,i) => t.nom.toLowerCase() === nom.toLowerCase() && !(tirEditMode === "ren" && i === curTireur))){ msg.className = "msg err"; msg.textContent = "Ce nom est déjà pris."; return; }
+  if (tirEditMode === "new"){ tireurs.push({nom, armes: []}); saveTireurs(); $("tirEdit").hidden = true; selectTireur(tireurs.length-1); return; }
+  const old = tireurs[curTireur].nom; tireurs[curTireur].nom = nom; saveTireurs();
+  if (curTireur > 0) await renameSessionsTireur(old, nom);   // les séances du propriétaire n'ont pas de champ : rien à changer
+  $("tirEdit").hidden = true; renderTireurs(); renderHistory();
+};
+async function renameSessionsTireur(old, nom){
+  for (const s of store.sessions.filter(x => x.tireur === old)){
+    if (store.kind === "db"){ const doc = {...s, tireur: nom}; delete doc.id; try { await store.db.collection("seances").doc(s.id).set(doc); } catch(e){} }
+    else s.tireur = nom;
+  }
+  if (store.kind !== "db") ls.set("c50_seances", store.sessions);
+}
+function saveSettings(){ ls.set("c50_settings", {mun:$("fMun").value, pos:$("fPos").value, hand:$("fHand").value, arme:$("fArme").value, cal:$("fCal").value, dist:$("fDist").value, click:$("fClick").value, unit:$("fUnit").value, tireur: tireurs[curTireur].nom}); }
 function loadSettings(){
   const s = ls.get("c50_settings", PRESETS.p320);
   $("fHand").value = s.hand||"droitier"; $("fMun").value = s.mun||""; if (s.pos) $("fPos").value = s.pos; $("fArme").value = s.arme||""; $("fCal").value = s.cal||"9.0"; $("fDist").value = s.dist||25; $("fClick").value = s.click||""; $("fUnit").value = s.unit||"mrad";
-  markPreset();
+  const k = tireurs.findIndex(t => t.nom === s.tireur); curTireur = k >= 0 ? k : 0;
+  renderTireurs();
 }
 const today = () => { const d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 
@@ -1357,7 +1428,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v14");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v15");
     renderHistory();
   }
 }
@@ -1371,6 +1442,7 @@ async function saveSession(){
     clickVal: +$("fClick").value || null, clickUnit: $("fUnit").value, note: $("fNote").value.trim(),
     mun: $("fMun").value.trim(), pos: $("fPos").value, v0: +$("fV0").value || null, vsd: +$("fVsd").value || null,
     series: state.holes.reduce((m,h)=>Math.max(m,(h.s||0)+1), 1),
+    ...(curTireur > 0 ? {tireur: tireurs[curTireur].nom} : {}),
     shots: shots.map((p,i) => { const h = state.holes[i], a = [Math.round(p.x*10)/10, Math.round(p.y*10)/10, h.s||0]; if (h.o != null) a.push(h.o); return a; })
   };
   const msg = $("saveMsg"); msg.className = "msg"; msg.textContent = "Enregistrement…";
@@ -1381,7 +1453,7 @@ async function saveSession(){
     } else {
       doc.id = "l" + doc.createdAt; store.sessions.push(doc); ls.set("c50_seances", store.sessions); renderHistory();
     }
-    msg.className = "msg ok"; msg.textContent = `Séance enregistrée : ${shots.length} impacts, ${computeStats(toPts(doc.shots), cal_mm, dist).total} points.`;
+    msg.className = "msg ok"; msg.textContent = `Séance enregistrée${curTireur > 0 ? " pour " + tireurs[curTireur].nom : ""} : ${shots.length} impacts, ${computeStats(toPts(doc.shots), cal_mm, dist).total} points.`;
     $("fNote").value = "";
   } catch(e){
     msg.className = "msg err";
@@ -1398,18 +1470,21 @@ function fillSelect(el, values, label){
 }
 function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 function filtered(){
-  const a = $("hArme").value, d = $("hDist").value, m = $("hMun").value;
-  return store.sessions.filter(s => (!a || s.arme===a) && (!d || String(s.distanceM)===d) && (!m || (s.mun||"")===m))
+  const t = $("hTireur").value, a = $("hArme").value, d = $("hDist").value, m = $("hMun").value;
+  return store.sessions.filter(s => (!t || tireurOf(s)===t) && (!a || s.arme===a) && (!d || String(s.distanceM)===d) && (!m || (s.mun||"")===m))
     .sort((x,y) => (x.date+String(x.createdAt)).localeCompare(y.date+String(y.createdAt)));
 }
 function renderHistory(){
+  const noms = [...new Set([...tireurs.map(t=>t.nom), ...store.sessions.map(tireurOf)])];
+  fillSelect($("hTireur"), noms, "Tous");
+  const plusieurs = new Set(store.sessions.map(tireurOf)).size > 1;
   const armes = [...new Set(store.sessions.map(s=>s.arme))].sort();
   const dists = [...new Set(store.sessions.map(s=>s.distanceM))].sort((a,b)=>a-b).map(String);
   fillSelect($("hArme"), armes, "Toutes"); fillSelect($("hDist"), dists, "Toutes");
   const muns = [...new Set(store.sessions.map(s=>s.mun||"").filter(Boolean))].sort();
   fillSelect($("hMun"), muns, "Toutes");
   $("munList").innerHTML = muns.map(m=>`<option value="${esc(m)}">`).join("");
-  $("armeList").innerHTML = [...new Set([...armes, ...Object.values(PRESETS).map(p=>p.arme)])].map(a=>`<option value="${esc(a)}">`).join("");
+  $("armeList").innerHTML = [...new Set([...armes, ...tireurs.flatMap(t=>t.armes.map(a=>a.arme))])].map(a=>`<option value="${esc(a)}">`).join("");
   const list = filtered().map(sessionStats);
   // résumé
   const tot = list.reduce((a,s)=>a+s.n,0);
@@ -1424,7 +1499,7 @@ function renderHistory(){
   drawChart(list);
   renderCompare(list);
   $("histBody").innerHTML = list.slice().reverse().map(st => { const s = st.s;
-    return `<tr data-id="${esc(s.id)}" aria-selected="${s.id===selectedId}"><td>${fmtDate(s.date)}</td><td>${esc(s.arme)}</td><td>${esc(s.mun||"–")}</td><td>${s.distanceM} m</td><td>${st.n}</td><td>${st.total}</td><td>${st.n?fmt(st.avg,2):"–"}</td><td>${fmt(st.sdx,1)}</td><td>${fmt(st.sdy,1)}</td><td>${fmt(st.sdr,1)}</td><td>${fmt(st.toMoa(st.sdr),2)}</td><td>${fmt(st.off,1)}</td><td>${(()=>{const f=analyzeFliers(toPts(s.shots), s.caliberMm, s.distanceM, $("fHand").value); return f?f.fliers.length:"–";})()}</td></tr>`;
+    return `<tr data-id="${esc(s.id)}" aria-selected="${s.id===selectedId}"><td>${fmtDate(s.date)}</td><td>${plusieurs && !$("hTireur").value ? `<b>${esc(tireurOf(s))}</b> · ` : ""}${esc(s.arme)}</td><td>${esc(s.mun||"–")}</td><td>${s.distanceM} m</td><td>${st.n}</td><td>${st.total}</td><td>${st.n?fmt(st.avg,2):"–"}</td><td>${fmt(st.sdx,1)}</td><td>${fmt(st.sdy,1)}</td><td>${fmt(st.sdr,1)}</td><td>${fmt(st.toMoa(st.sdr),2)}</td><td>${fmt(st.off,1)}</td><td>${(()=>{const f=analyzeFliers(toPts(s.shots), s.caliberMm, s.distanceM, $("fHand").value); return f?f.fliers.length:"–";})()}</td></tr>`;
   }).join("") || `<tr><td colspan="13" class="empty" style="font-family:var(--body)">Aucune séance enregistrée pour ce filtre. Analyse une cible puis « Enregistrer dans l'historique ».</td></tr>`;
   document.querySelectorAll("#histBody tr[data-id]").forEach(tr => tr.onclick = () => { selectedId = selectedId===tr.dataset.id ? null : tr.dataset.id; confirmDel=false; editInfo=false; renderHistory(); });
   renderDetail();
@@ -1451,7 +1526,7 @@ function renderCompare(list){
 }
 const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
 const fmtDate = d => { const [y,m,j] = String(d).split("-"); return j ? `${j}/${m}/${y}` : d; };
-["hArme","hDist","hMun","hMetric"].forEach(id => $(id).addEventListener("change", () => { ls.set("c50_hmetric", $("hMetric").value); renderHistory(); }));
+["hTireur","hArme","hDist","hMun","hMetric"].forEach(id => $(id).addEventListener("change", () => { ls.set("c50_hmetric", $("hMetric").value); renderHistory(); }));
 
 const METRICS = {
   sdr:    {get:s=>s.sdr, ci:s=>s.sdrCI, unit:"mm", d:1},
@@ -1529,6 +1604,7 @@ function renderDetail(){
   const st = sessionStats(s);
   box.innerHTML = `<div class="detail"><div>${plotSVG(st)}</div><div>
     <h2 style="font-family:var(--display);font-weight:600;font-size:20px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.04em">${fmtDate(s.date)} · ${esc(s.arme)} · ${s.distanceM} m</h2>
+    <p class="muted" style="margin:0 0 4px">Tireur : <b>${esc(tireurOf(s))}</b></p>
     <p class="muted" style="margin:0 0 10px">${esc(s.calibre||"")}${s.mun?` · ${esc(s.mun)}`:""}${s.pos?` · ${esc(s.pos)}`:""} · ${st.n} coups · ${st.total} pts (${fmt(st.dec,1)}) · ${st.x} X${s.v0?` · ${fmt(s.v0,0)} m/s${s.vsd?` (σ ${fmt(s.vsd,1)})`:""}`:""}${s.note?` · ${esc(s.note)}`:""}</p>
     <table class="disp"><thead><tr><th></th><th>mm</th><th>MOA</th><th>mrad</th></tr></thead><tbody>
     ${[["PMI H",st.mx,1],["PMI V",st.my,1],["Écart-type H",st.sdx],["Écart-type V",st.sdy],["Écart-type radial",st.sdr],["Groupement",st.es]].map(([l,v,sg])=>{const f=sg?sgn:fmt;return `<tr><td>${l}</td><td>${f(v,1)}</td><td>${f(st.toMoa(v),2)}</td><td>${f(st.toMrad(v),2)}</td></tr>`;}).join("")}
@@ -1536,6 +1612,7 @@ function renderDetail(){
     ${st.sdrCI?`<p class="note">Fourchette 95 % de l'écart-type radial : ${fmt(st.sdrCI[0],1)}–${fmt(st.sdrCI[1],1)} mm.</p>`:""}
     <div id="dSer" hidden style="margin-top:10px"><table class="disp"><thead><tr><th>Série</th><th>Coups</th><th>Pts</th><th>Moy.</th><th><i class="sg">σ</i>R mm</th><th>PMI x</th><th>PMI y</th></tr></thead><tbody id="dSerBody"></tbody></table><div class="msg" id="dSerMsg"></div></div>
     ${editInfo ? `<div class="fields" style="margin-top:12px">
+      <div class="field full"><label for="eTir">Tireur</label><select id="eTir">${[...new Set([...tireurs.map(t=>t.nom), tireurOf(s)])].map(v=>`<option${v===tireurOf(s)?" selected":""}>${esc(v)}</option>`).join("")}</select></div>
       <div class="field full"><label for="eMun">Munition ou recette</label><input id="eMun" list="munList" value="${esc(s.mun||"")}"></div>
       <div class="field"><label for="ePos">Position</label><select id="ePos">${[...new Set([...[...$("fPos").options].map(o=>o.value), s.pos||""])].filter(Boolean).map(v=>`<option${v===(s.pos||"")?" selected":""}>${esc(v)}</option>`).join("")}</select></div>
       <div class="field"><label for="eV0">Vitesse moy. (m/s)</label><input id="eV0" type="number" inputmode="decimal" min="0" value="${s.v0!=null?s.v0:""}"></div>
@@ -1554,9 +1631,10 @@ function renderDetail(){
   if ($("bInfoNo")) $("bInfoNo").onclick = () => { editInfo = false; renderDetail(); };
   if ($("bInfoOk")) $("bInfoOk").onclick = async () => {
     const upd = {mun: $("eMun").value.trim(), pos: $("ePos").value, v0: +$("eV0").value || null, vsd: +$("eVsd").value || null, note: $("eNote").value.trim()};
+    const tir = $("eTir").value, own = tir === ownerName();            // séance du propriétaire : pas de champ tireur
     try {
-      if (store.kind === "db"){ const doc = {...s, ...upd}; delete doc.id; await store.db.collection("seances").doc(s.id).set(doc); }
-      else { Object.assign(s, upd); ls.set("c50_seances", store.sessions); }
+      if (store.kind === "db"){ const doc = {...s, ...upd}; delete doc.id; if (own) delete doc.tireur; else doc.tireur = tir; await store.db.collection("seances").doc(s.id).set(doc); }
+      else { Object.assign(s, upd); if (own) delete s.tireur; else s.tireur = tir; ls.set("c50_seances", store.sessions); }
       editInfo = false; renderHistory();
     } catch(e){ const m = $("infoMsg"); if (m){ m.className = "msg err full"; m.textContent = "Échec de l'enregistrement des modifications. Réessaie."; } }
   };
@@ -1572,11 +1650,11 @@ function renderDetail(){
 }
 
 function buildCSV(){
-  const head = ["date","arme","munition","position","v0_ms","sd_v0_ms","calibre","distance_m","coups","points","decimal","mouches","moy_coup","pmi_x_mm","pmi_y_mm","decalage_mm","sd_h_mm","sd_v_mm","sd_radial_mm","sd_radial_moa","sd_radial_mrad","rayon_moyen_mm","groupement_mm","coups_ecartes","groupement_sans_ecartes_mm","sd_radial_sans_ecartes_mm","note","impacts_mm"];
+  const head = ["date","arme","munition","position","v0_ms","sd_v0_ms","calibre","distance_m","coups","points","decimal","mouches","moy_coup","pmi_x_mm","pmi_y_mm","decalage_mm","sd_h_mm","sd_v_mm","sd_radial_mm","sd_radial_moa","sd_radial_mrad","rayon_moyen_mm","groupement_mm","coups_ecartes","groupement_sans_ecartes_mm","sd_radial_sans_ecartes_mm","note","impacts_mm","tireur"];
   const n = v => v==null||!isFinite(v) ? "" : String(Math.round(v*100)/100).replace(".", ",");
   const q = v => `"${String(v??"").replace(/"/g,'""')}"`;
   const rows = filtered().map(sessionStats).map(st => { const s = st.s;
-    return [s.date, q(s.arme), q(s.mun||""), q(s.pos||""), n(s.v0), n(s.vsd), q(s.calibre), s.distanceM, st.n, st.total, n(st.dec), st.x, n(st.avg), n(st.mx), n(st.my), n(st.off), n(st.sdx), n(st.sdy), n(st.sdr), n(st.toMoa(st.sdr)), n(st.toMrad(st.sdr)), n(st.mr), n(st.es), ...(()=>{const f=analyzeFliers(toPts(s.shots), s.caliberMm, s.distanceM, "droitier"); return f?[f.fliers.length, n(f.core.es), n(f.core.sdr)]:["","",""];})(), q(s.note), q(s.shots.map(p=>`${p[0]} ${p[1]} s${(p[2]||0)+1}`).join(" | "))].join(";"); });
+    return [s.date, q(s.arme), q(s.mun||""), q(s.pos||""), n(s.v0), n(s.vsd), q(s.calibre), s.distanceM, st.n, st.total, n(st.dec), st.x, n(st.avg), n(st.mx), n(st.my), n(st.off), n(st.sdx), n(st.sdy), n(st.sdr), n(st.toMoa(st.sdr)), n(st.toMrad(st.sdr)), n(st.mr), n(st.es), ...(()=>{const f=analyzeFliers(toPts(s.shots), s.caliberMm, s.distanceM, "droitier"); return f?[f.fliers.length, n(f.core.es), n(f.core.sdr)]:["","",""];})(), q(s.note), q(s.shots.map(p=>`${p[0]} ${p[1]} s${(p[2]||0)+1}`).join(" | ")), q(tireurOf(s))].join(";"); });
   return "﻿" + head.join(";") + "\n" + rows.join("\n");
 }
 // Enregistre un fichier : via Claude dans l'artifact, par un lien de téléchargement dans l'appli autonome
@@ -1591,12 +1669,19 @@ async function saveFile(filename, data, mime){
   $("exportArea").hidden = false; $("exportTxt").value = data; $("exportTxt").select();
 }
 $("bExport").onclick = () => saveFile(`seances-c50-${today()}.csv`, buildCSV(), "text/csv");
-$("bBackup").onclick = () => saveFile(`pointage-c50-sauvegarde-${today()}.json`, JSON.stringify({app:"pointage-c50", v:1, sessions: store.sessions}, null, 1), "application/json");
+$("bBackup").onclick = () => saveFile(`pointage-c50-sauvegarde-${today()}.json`, JSON.stringify({app:"pointage-c50", v:1, tireurs, sessions: store.sessions}, null, 1), "application/json");
 $("fRestore").onchange = async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   let list; try { const o = JSON.parse(await f.text()); list = Array.isArray(o) ? o : o.sessions; } catch(err){ list = null; }
   const msg = $("restoreMsg");
   if (!Array.isArray(list)){ msg.className = "msg err"; msg.textContent = "Fichier non reconnu : choisis une sauvegarde .json de Pointage C50."; return; }
+  try { const o = JSON.parse(await f.text());
+    if (o && Array.isArray(o.tireurs)) for (const t of o.tireurs){ if (!t || typeof t.nom !== "string" || !Array.isArray(t.armes)) continue;
+      const cur = tireurs.find(x => x.nom === t.nom) || (o.tireurs.indexOf(t) === 0 ? tireurs[0] : null);   // son propriétaire = le tien
+      if (cur){ for (const a of t.armes) if (a && a.arme && !cur.armes.some(b => b.arme === a.arme && b.cal === a.cal)) cur.armes.push({arme:a.arme, cal:a.cal, dist:a.dist}); }
+      else tireurs.push({nom: t.nom, armes: t.armes.filter(a => a && a.arme).map(a => ({arme:a.arme, cal:a.cal, dist:a.dist}))}); }
+    saveTireurs(); renderTireurs();
+  } catch(err){}
   const have = new Set(store.sessions.map(s=>s.id)); let added = 0;
   for (const raw of list){
     if (!raw || !Array.isArray(raw.shots) || !raw.date) continue;
@@ -1611,6 +1696,51 @@ $("fRestore").onchange = async e => {
   }
   if (store.kind !== "db"){ ls.set("c50_seances", store.sessions); renderHistory(); }
   msg.className = "msg ok"; msg.textContent = `${added} séance${added>1?"s":""} ajoutée${added>1?"s":""} (les séances déjà présentes sont ignorées).`;
+};
+
+// Import des séances d'un autre tireur, depuis sa propre sauvegarde .json. Elles reçoivent son nom (champ tireur)
+// et un identifiant préfixé : elles ne se mélangent pas aux tiennes, et un second import du même fichier est ignoré.
+let pendingImport = null;
+const slug = t => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "tireur";
+$("fImportT").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  let list; try { const o = JSON.parse(await f.text()); list = Array.isArray(o) ? o : o.sessions; } catch(err){ list = null; }
+  const msg = $("restoreMsg"); msg.className = "msg"; msg.textContent = "";
+  list = Array.isArray(list) ? list.filter(r => r && Array.isArray(r.shots) && r.date) : null;
+  if (!list || !list.length){ msg.className = "msg err"; msg.textContent = "Fichier non reconnu : choisis la sauvegarde .json Pointage C50 de ce tireur."; return; }
+  const noms = [...new Set(list.map(r => r.tireur).filter(Boolean))];
+  pendingImport = list;
+  $("importInfo").textContent = `${list.length} séance${list.length>1?"s":""} trouvée${list.length>1?"s":""} (${[...new Set(list.map(r=>r.arme))].join(", ")}). À quel nom les ranger ?`;
+  $("fImpNom").value = noms.length === 1 ? noms[0] : ""; $("importBox").hidden = false; $("fImpNom").focus();
+};
+$("bImpNo").onclick = () => { pendingImport = null; $("importBox").hidden = true; };
+$("bImpOk").onclick = async () => {
+  const nom = $("fImpNom").value.trim().replace(/\s+/g, " "), msg = $("restoreMsg");
+  if (!pendingImport) return;
+  if (!nom){ $("fImpNom").focus(); return; }
+  if (nom.toLowerCase() === ownerName().toLowerCase()){ msg.className = "msg err"; msg.textContent = `« ${nom} » est le tireur de ce téléphone : pour tes propres séances, utilise « Restaurer ».`; return; }
+  let t = tireurs.find(x => x.nom.toLowerCase() === nom.toLowerCase());
+  if (!t){ t = {nom, armes: []}; tireurs.push(t); }
+  // ses armes, d'après ses séances : arme + calibre (retrouvé dans la liste des calibres)
+  for (const r of pendingImport){ const opt = [...$("fCal").options].find(o => o.textContent.split(" · ")[0] === r.calibre) || [...$("fCal").options].find(o => parseFloat(o.value) === r.caliberMm);
+    if (r.arme && opt && !t.armes.some(a => a.arme === r.arme && a.cal === opt.value)) t.armes.push({arme: r.arme, cal: opt.value, dist: r.distanceM || 25}); }
+  saveTireurs();
+  const have = new Set(store.sessions.map(x => x.id)); let added = 0, skipped = 0;
+  for (const raw of pendingImport){
+    const id = ("t-" + slug(t.nom) + "-" + String(raw.id || raw.createdAt || raw.date)).replace(/[^A-Za-z0-9_\-.~:@+]/g, "_");
+    if (have.has(id)){ skipped++; continue; }
+    // ses propres séances n'ont pas de champ tireur : elles prennent son nom ; un tiers déjà nommé chez lui garde le sien,
+    // sauf s'il porte ton nom (il serait confondu avec toi)
+    const doc = {...raw, tireur: raw.tireur && raw.tireur.toLowerCase() !== ownerName().toLowerCase() ? raw.tireur : t.nom}; delete doc.id;
+    try {
+      if (store.kind === "db") await store.db.collection("seances").doc(id).set(doc);
+      else store.sessions.push({...doc, id});
+      have.add(id); added++;
+    } catch(err){ break; }
+  }
+  if (store.kind !== "db") ls.set("c50_seances", store.sessions);
+  pendingImport = null; $("importBox").hidden = true; renderTireurs(); renderHistory(); $("hTireur").value = t.nom; renderHistory();
+  msg.className = "msg ok"; msg.textContent = `${added} séance${added>1?"s":""} de ${t.nom} ajoutée${added>1?"s":""}${skipped?` (${skipped} déjà présente${skipped>1?"s":""}, ignorée${skipped>1?"s":""})`:""}. Tes séances ne sont pas modifiées.`;
 };
 
 // ---------- onglets ----------
