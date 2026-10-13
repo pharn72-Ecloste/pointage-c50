@@ -1333,12 +1333,18 @@ $("shotBody").addEventListener("click", e => {
   refresh();
 });
 ["fCal","fDist","fClick","fUnit","fHand"].forEach(id => $(id).addEventListener("input", () => { saveSettings(); refresh(); }));
+// la valeur du clic appartient à l'arme : la modifier met à jour l'arme choisie dans la liste du tireur
+// (on ne redessine pas les boutons : ce « change » part quand on quitte le champ, souvent en touchant une autre arme,
+// et un bouton remplacé à cet instant perdrait le toucher)
+["fClick","fUnit"].forEach(id => $(id).addEventListener("change", () => { const a = armeCourante(); if (!a) return;
+  a.click = +$("fClick").value || null; a.unit = $("fUnit").value; saveTireurs();
+  const el = $("presets").querySelector(`.chip[data-i="${tireurs[curTireur].armes.indexOf(a)}"] .chiplbl`); if (el) el.textContent = armeLabel(a); }));
 $("fArme").addEventListener("input", () => { saveSettings(); markPreset(); });
 $("fCal").addEventListener("change", markPreset);
 ["fMun","fPos"].forEach(id => $(id).addEventListener("change", saveSettings));
 
 // ---------- tireurs et armes ----------
-// c50_tireurs : [{nom, armes:[{arme, cal, dist}]}]. Le premier est le propriétaire du téléphone : ses séances n'ont
+// c50_tireurs : [{nom, armes:[{arme, cal, dist, click?, unit?}]}] (click/unit depuis la v16 : valeur d'un clic de ses organes de visée). Le premier est le propriétaire du téléphone : ses séances n'ont
 // pas de champ « tireur » (celles d'avant la v15 non plus), elles suivent son nom même s'il le renomme.
 // Les séances des autres tireurs portent s.tireur = leur nom.
 const PRESETS = {
@@ -1361,24 +1367,29 @@ function renderTireurs(){
 }
 function renderPresets(){
   const t = tireurs[curTireur];
-  $("presets").innerHTML = t.armes.map((a,i) => `<span class="chip" role="button" tabindex="0" data-i="${i}">${esc(a.arme)} · ${esc(calLabel(a.cal))}<b class="chipx" data-x="${i}" title="Retirer cette arme" aria-label="Retirer">×</b></span>`).join("")
+  $("presets").innerHTML = t.armes.map((a,i) => `<span class="chip" role="button" tabindex="0" data-i="${i}"><span class="chiplbl">${esc(armeLabel(a))}</span><b class="chipx" data-x="${i}" title="Retirer cette arme" aria-label="Retirer">×</b></span>`).join("")
     + `<button class="chip" id="bArmeAdd" title="Garde l'arme, le calibre et la distance saisis ci-dessous dans la liste de ce tireur">＋ Ajouter cette arme</button>`;
   $("presets").querySelectorAll(".chip[data-i]").forEach(c => c.onclick = e => {
     if (e.target.dataset.x != null){ const a = t.armes[+e.target.dataset.x];
       if (confirm(`Retirer « ${a.arme} » de la liste de ${t.nom} ? Les séances déjà enregistrées ne changent pas.`)){ t.armes.splice(+e.target.dataset.x, 1); saveTireurs(); renderPresets(); }
       return; }
-    const a = t.armes[+c.dataset.i]; $("fArme").value = a.arme; $("fCal").value = a.cal; if (a.dist) $("fDist").value = a.dist;
+    applyArme(t.armes[+c.dataset.i]);
     saveSettings(); markPreset(); refresh();
   });
   $("bArmeAdd").onclick = () => { const arme = $("fArme").value.trim(); if (!arme){ $("fArme").focus(); return; }
-    const a = {arme, cal: $("fCal").value, dist: +$("fDist").value || 25}, k = t.armes.findIndex(x => x.arme === arme && x.cal === a.cal);
+    const a = {arme, cal: $("fCal").value, dist: +$("fDist").value || 25, click: +$("fClick").value || null, unit: $("fUnit").value}, k = t.armes.findIndex(x => x.arme === arme && x.cal === a.cal);
     if (k >= 0) t.armes[k] = a; else t.armes.push(a); saveTireurs(); renderPresets(); };
   markPreset();
 }
+const armeLabel = a => `${a.arme} · ${calLabel(a.cal)}${fmtClick(a)}`;
+const fmtClick = a => a.click ? ` · ${String(a.click).replace(".", ",")} ${a.unit === "moa" ? "MOA" : "mrad"}/clic` : "";
+function applyArme(a){ $("fArme").value = a.arme; $("fCal").value = a.cal; if (a.dist) $("fDist").value = a.dist;
+  $("fClick").value = a.click || ""; $("fUnit").value = a.unit || "mrad"; }
+const armeCourante = () => tireurs[curTireur].armes.find(a => a.arme === $("fArme").value.trim() && a.cal === $("fCal").value);
 function markPreset(){ const t = tireurs[curTireur]; document.querySelectorAll("#presets .chip[data-i]").forEach(b => { const a = t.armes[+b.dataset.i]; b.setAttribute("aria-pressed", a.arme === $("fArme").value && a.cal === $("fCal").value); }); }
 function selectTireur(i){
   curTireur = Math.max(0, Math.min(tireurs.length-1, i)); const a = tireurs[curTireur].armes[0];
-  if (a){ $("fArme").value = a.arme; $("fCal").value = a.cal; if (a.dist) $("fDist").value = a.dist; }
+  if (a) applyArme(a);
   saveSettings(); renderTireurs(); refresh();
 }
 let tirEditMode = null;                               // "new" ou "ren"
@@ -1409,6 +1420,9 @@ function loadSettings(){
   const s = ls.get("c50_settings", PRESETS.p320);
   $("fHand").value = s.hand||"droitier"; $("fMun").value = s.mun||""; if (s.pos) $("fPos").value = s.pos; $("fArme").value = s.arme||""; $("fCal").value = s.cal||"9.0"; $("fDist").value = s.dist||25; $("fClick").value = s.click||""; $("fUnit").value = s.unit||"mrad";
   const k = tireurs.findIndex(t => t.nom === s.tireur); curTireur = k >= 0 ? k : 0;
+  const a = armeCourante();
+  if (a && a.click === undefined){ a.click = +s.click || null; a.unit = s.unit || "mrad"; saveTireurs(); }   // reprise de la valeur globale d'avant la v16
+  else if (a){ $("fClick").value = a.click || ""; $("fUnit").value = a.unit || "mrad"; }
   renderTireurs();
 }
 const today = () => { const d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
@@ -1428,7 +1442,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v15");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v16");
     renderHistory();
   }
 }
@@ -1678,8 +1692,8 @@ $("fRestore").onchange = async e => {
   try { const o = JSON.parse(await f.text());
     if (o && Array.isArray(o.tireurs)) for (const t of o.tireurs){ if (!t || typeof t.nom !== "string" || !Array.isArray(t.armes)) continue;
       const cur = tireurs.find(x => x.nom === t.nom) || (o.tireurs.indexOf(t) === 0 ? tireurs[0] : null);   // son propriétaire = le tien
-      if (cur){ for (const a of t.armes) if (a && a.arme && !cur.armes.some(b => b.arme === a.arme && b.cal === a.cal)) cur.armes.push({arme:a.arme, cal:a.cal, dist:a.dist}); }
-      else tireurs.push({nom: t.nom, armes: t.armes.filter(a => a && a.arme).map(a => ({arme:a.arme, cal:a.cal, dist:a.dist}))}); }
+      if (cur){ for (const a of t.armes) if (a && a.arme && !cur.armes.some(b => b.arme === a.arme && b.cal === a.cal)) cur.armes.push({arme:a.arme, cal:a.cal, dist:a.dist, click:a.click||null, unit:a.unit||"mrad"}); }
+      else tireurs.push({nom: t.nom, armes: t.armes.filter(a => a && a.arme).map(a => ({arme:a.arme, cal:a.cal, dist:a.dist, click:a.click||null, unit:a.unit||"mrad"}))}); }
     saveTireurs(); renderTireurs();
   } catch(err){}
   const have = new Set(store.sessions.map(s=>s.id)); let added = 0;
@@ -1723,7 +1737,7 @@ $("bImpOk").onclick = async () => {
   if (!t){ t = {nom, armes: []}; tireurs.push(t); }
   // ses armes, d'après ses séances : arme + calibre (retrouvé dans la liste des calibres)
   for (const r of pendingImport){ const opt = [...$("fCal").options].find(o => o.textContent.split(" · ")[0] === r.calibre) || [...$("fCal").options].find(o => parseFloat(o.value) === r.caliberMm);
-    if (r.arme && opt && !t.armes.some(a => a.arme === r.arme && a.cal === opt.value)) t.armes.push({arme: r.arme, cal: opt.value, dist: r.distanceM || 25}); }
+    if (r.arme && opt && !t.armes.some(a => a.arme === r.arme && a.cal === opt.value)) t.armes.push({arme: r.arme, cal: opt.value, dist: r.distanceM || 25, click: r.clickVal || null, unit: r.clickUnit || "mrad"}); }
   saveTireurs();
   const have = new Set(store.sessions.map(x => x.id)); let added = 0, skipped = 0;
   for (const raw of pendingImport){

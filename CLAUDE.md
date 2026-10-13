@@ -43,12 +43,13 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v15` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v15`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v16` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v16`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,
-`c50_hmetric`, et depuis la v15 `c50_tireurs` : la liste des tireurs et de leurs armes). **Ne change jamais leur format sans conserver la lecture de l'ancien** : il n'existe
+`c50_hmetric`, et depuis la v15 `c50_tireurs` : la liste des tireurs et de leurs armes ; depuis la v16, chaque arme
+porte aussi `click` et `unit`, la valeur d'un clic de ses organes de visée). **Ne change jamais leur format sans conserver la lecture de l'ancien** : il n'existe
 aucune autre copie que les sauvegardes `.json` que l'utilisateur fait à la main. Une séance contient
 `shots: [[x, y, série, pointsCorrigés?], …]` en millimètres, origine au centre, y vers le haut.
 Depuis la v15, une séance peut porter `tireur` : le nom d'un autre tireur. Les séances du propriétaire du

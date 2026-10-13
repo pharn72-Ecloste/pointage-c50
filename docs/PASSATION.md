@@ -20,7 +20,7 @@ Son matériel et ses habitudes :
   sur le porte-cible, avec le vide du pas de tir derrière.
 - Téléphone Android et PC Windows 10. L'appli est installée depuis Chrome.
 
-## Ce que fait l'application (version 15)
+## Ce que fait l'application (version 16)
 
 - Calage automatique de la cible, avec correction de perspective, et poignées de réglage manuel.
 - Détection des impacts, correction à la main : ajouter, supprimer, déplacer, annuler.
@@ -40,6 +40,8 @@ Son matériel et ses habitudes :
   à son nom ; l'historique se filtre par tireur ; la sauvegarde `.json` d'un autre tireur s'importe à son nom
   sans toucher aux séances du propriétaire. Le tireur d'une séance enregistrée reste modifiable dans sa fiche.
   Les statistiques « Tous » mélangent les tireurs : filtrer sur un tireur pour lire les siennes.
+- Valeur du clic par arme (v16) : choisir une arme remet sa valeur et son unité ; modifier la valeur l'enregistre
+  dans l'arme choisie. À la mise à jour, l'ancienne valeur commune est allée à l'arme réglée à ce moment-là.
 
 ## Les mesures de terrain
 
