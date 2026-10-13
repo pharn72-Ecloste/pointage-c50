@@ -130,7 +130,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
 .hfilters .field{width:auto;min-width:150px}
 .chartwrap{position:relative;padding:12px 12px 4px}
 .chartwrap svg{width:100%;height:auto;display:block}
-.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font:500 12px var(--mono);padding:6px 8px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-110%)}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font:500 12px var(--mono);padding:6px 8px;border-radius:6px;max-width:calc(100% - 8px);box-sizing:border-box;transform:translateY(-110%)}
 .hsum{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 12px 12px}
 @media (max-width:640px){.hsum{grid-template-columns:repeat(2,1fr)} .kv{grid-template-columns:repeat(2,1fr)}}
 .hsum div{background:var(--surface-2);border-radius:6px;padding:8px 10px}
@@ -336,6 +336,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
         <textarea class="exportbox" id="exportTxt" readonly></textarea>
       </div>
       <div class="chartwrap" id="chartWrap"><svg id="chart" viewBox="0 0 720 240" role="img" aria-label="Évolution"></svg><div class="tip" id="tip" hidden></div></div>
+      <p class="note" id="chartNote" style="margin:0 12px 8px" hidden></p>
       <div class="hsum" id="hsum"></div>
       <div id="cmpBox"></div>
       <div class="tablewrap">
@@ -1442,7 +1443,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v17");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v18");
     renderHistory();
   }
 }
@@ -1553,8 +1554,8 @@ const fmtDate = d => { const [y,m,j] = String(d).split("-"); return j ? `${j}/${
 ["hTireur","hArme","hDist","hMun","hMetric"].forEach(id => $(id).addEventListener("change", () => { ls.set("c50_hmetric", $("hMetric").value); renderHistory(); }));
 
 const METRICS = {
-  sdr:    {get:s=>s.sdr, ci:s=>s.sdrCI, unit:"mm", d:1},
-  sdrMoa: {get:s=>s.toMoa(s.sdr), ci:s=>s.sdrCI && [s.toMoa(s.sdrCI[0]), s.toMoa(s.sdrCI[1])], unit:"MOA", d:2},
+  sdr:    {get:s=>s.sdr, ci:s=>s.sdrCI, unit:"mm", d:1, roll:"mm"},
+  sdrMoa: {get:s=>s.toMoa(s.sdr), ci:s=>s.sdrCI && [s.toMoa(s.sdrCI[0]), s.toMoa(s.sdrCI[1])], unit:"MOA", d:2, roll:"moa"},
   avg:    {get:s=>s.n?s.avg:null, unit:"pts", d:2},
   off:    {get:s=>s.n?s.off:null, unit:"mm", d:1},
   es:     {get:s=>s.es, unit:"mm", d:1}
@@ -1565,15 +1566,34 @@ function niceTicks(lo, hi, n=4){
   const step = (f<1.5?1:f<3?2:f<7?5:10)*mag, a = Math.floor(lo/step)*step, b = Math.ceil(hi/step)*step, t=[];
   for (let v=a; v<=b+step/2; v+=step) t.push(+v.toFixed(10)); return t;
 }
+// Moyenne glissante de l'écart-type radial sur les ROLL_N dernières séances : écart-type mis en commun sur tous
+// leurs coups (une séance de 30 coups pèse plus qu'une de 15), pas moyenne des écart-types. Un cumul depuis la
+// première séance devenait inerte et cachait les progrès. Seulement pour un même tireur et une même arme ; en mm,
+// en plus, pour une même distance : sinon la courbe monterait dès qu'une séance à 25 m arrive.
+const ROLL_N = 3;
+function rollingSd(pts, unit){
+  return pts.map((p,i) => { let ss=0, df=0;
+    pts.slice(Math.max(0, i-ROLL_N+1), i+1).forEach(q => { const st = q.s, f = unit==="moa" ? st.toMoa(1) : 1;
+      ss += (st.n-1)*((st.sdx*f)**2 + (st.sdy*f)**2); df += st.n-1; });
+    return df ? Math.sqrt(ss/df) : null; });
+}
 function drawChart(list){
-  const svg = $("chart"), m = METRICS[$("hMetric").value];
+  const svg = $("chart"), m = METRICS[$("hMetric").value], note = $("chartNote");
   const pts = list.map(s => ({v:m.get(s), ci: m.ci ? m.ci(s) : null, s})).filter(p => p.v!=null && isFinite(p.v));
   const W=720, H=240, L=48, R=16, T=14, B=34;
+  note.hidden = true;
+  let roll = null;
+  if (m.roll && pts.length >= 2){
+    const uniq = f => new Set(pts.map(p => f(p.s.s))).size === 1;
+    if (!uniq(tireurOf) || !uniq(s => s.arme)) { note.hidden = false; note.textContent = "Choisis un tireur et une arme pour voir la moyenne glissante des 3 dernières séances."; }
+    else if (m.roll === "mm" && !uniq(s => s.distanceM)) { note.hidden = false; note.textContent = "En mm, la moyenne glissante ne compare qu'une même distance : choisis une distance, ou passe la courbe en MOA."; }
+    else { roll = rollingSd(pts, m.roll); note.hidden = false; note.innerHTML = `Pointillé : écart-type radial mis en commun sur les ${ROLL_N} dernières séances (tous leurs coups). Il suit ton niveau du moment ; une baisse d'une séance à l'autre peut rester dans le bruit.`; }
+  }
   if (pts.length < 2){
     svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--muted)" font-size="14" font-family="IBM Plex Sans, sans-serif">${pts.length?"Encore une séance pour tracer l'évolution.":"Les séances enregistrées apparaîtront ici."}</text>`;
     return;
   }
-  const vals = pts.flatMap(p => p.ci ? [p.v, p.ci[0], p.ci[1]] : [p.v]), ticks = niceTicks(Math.min(...vals), Math.max(...vals));
+  const vals = pts.flatMap(p => p.ci ? [p.v, p.ci[0], p.ci[1]] : [p.v]).concat(roll ? roll.filter(v => v!=null) : []), ticks = niceTicks(Math.min(...vals), Math.max(...vals));
   const y0 = ticks[0], y1 = ticks[ticks.length-1];
   const X = i => L + (W-L-R) * (pts.length===1 ? .5 : i/(pts.length-1));
   const Y = v => T + (H-T-B) * (1 - (v-y0)/(y1-y0));
@@ -1587,12 +1607,13 @@ function drawChart(list){
   h += `<path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
   pts.forEach((p,i) => { if (!p.ci) return; const x = X(i);
     h += `<line x1="${x}" x2="${x}" y1="${Y(p.ci[0])}" y2="${Y(p.ci[1])}" stroke="var(--accent)" stroke-width="1.5" opacity=".45"/><line x1="${x-4}" x2="${x+4}" y1="${Y(p.ci[0])}" y2="${Y(p.ci[0])}" stroke="var(--accent)" stroke-width="1.5" opacity=".45"/><line x1="${x-4}" x2="${x+4}" y1="${Y(p.ci[1])}" y2="${Y(p.ci[1])}" stroke="var(--accent)" stroke-width="1.5" opacity=".45"/>`; });
+  if (roll) h += `<path d="${roll.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join("")}" fill="none" stroke="var(--ink-2)" stroke-width="2" stroke-dasharray="6 4" stroke-linejoin="round"/>`;
   pts.forEach((p,i) => { const last = i===pts.length-1;
     h += `<circle cx="${X(i)}" cy="${Y(p.v)}" r="${last?5:3.5}" fill="${last?"var(--accent)":"var(--surface)"}" stroke="var(--accent)" stroke-width="2"/>`; });
   const lp = pts[pts.length-1];
   h += `<text x="${X(pts.length-1)-8}" y="${Y(lp.v)-12}" text-anchor="end" fill="var(--ink)" font-size="12" font-weight="600" font-family="IBM Plex Mono, monospace">${fmt(lp.v,m.d)} ${m.unit}</text>`;
   h += `<line id="xh" x1="0" x2="0" y1="${T}" y2="${H-B}" stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>`;
-  h += `<rect x="${L}" y="0" width="${W-L-R}" height="${H}" fill="transparent" id="hit"/>`;
+  h += `<rect x="0" y="0" width="${W}" height="${H}" fill="transparent" id="hit"/>`;
   svg.innerHTML = h;
   const tip = $("tip"), wrap = $("chartWrap");
   const hit = svg.querySelector("#hit"), xh = svg.querySelector("#xh");
@@ -1601,8 +1622,11 @@ function drawChart(list){
     let bi=0, bd=1e9; pts.forEach((p,i)=>{ const d=Math.abs(X(i)-sx); if(d<bd){bd=d;bi=i;} });
     const p = pts[bi], px = X(bi)*r.width/W, py = Y(p.v)*r.height/H;
     xh.setAttribute("x1", X(bi)); xh.setAttribute("x2", X(bi)); xh.setAttribute("visibility","visible");
-    tip.hidden = false; tip.style.left = (px+12)+"px"; tip.style.top = (py+12)+"px";
-    tip.textContent = `${fmtDate(p.s.s.date)} · ${p.s.s.arme}${p.s.s.mun?" · "+p.s.s.mun:""} ${p.s.s.distanceM} m · ${fmt(p.v,m.d)} ${m.unit}${p.ci?` (${fmt(p.ci[0],m.d)}–${fmt(p.ci[1],m.d)})`:""}`;
+    tip.hidden = false; tip.style.left = "0px"; tip.style.top = (py+12)+"px";
+    tip.textContent = `${fmtDate(p.s.s.date)} · ${p.s.s.arme}${p.s.s.mun?" · "+p.s.s.mun:""} ${p.s.s.distanceM} m · ${fmt(p.v,m.d)} ${m.unit}${p.ci?` (${fmt(p.ci[0],m.d)}–${fmt(p.ci[1],m.d)})`:""}${roll?` · moy. ${Math.min(bi+1, ROLL_N)} dernières : ${fmt(roll[bi],m.d)} ${m.unit}`:""}`;
+    // bulle centrée au-dessus du point, gardée dans le cadre (sur téléphone, le texte passe à la ligne)
+    const ox = r.left - wrap.getBoundingClientRect().left, tw = tip.offsetWidth;
+    tip.style.left = Math.max(4, Math.min(wrap.clientWidth - tw - 4, ox + px - tw/2)) + "px";
   };
   hit.onpointerleave = () => { tip.hidden = true; xh.setAttribute("visibility","hidden"); };
 }
