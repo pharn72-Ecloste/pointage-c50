@@ -7,6 +7,9 @@
 //     et vérité terrain tests/verite-2026-10-11.json : les 30 positions de l'utilisateur après correction.
 //     Banc d'essai : on compte les coups retrouvés à 3 mm près dans la bonne série. Le plancher (28 sur 30,
 //     4 en trop au plus) est le niveau de la v14 : le test échoue s'il recule, pas s'il progresse.
+//   23/10/2026, 15 m, P320 X-Carry, fond bleu : 6 photos de 5 coups, référence tests/attendu-2026-10-23.json et vérité
+//     terrain tests/verite-2026-10-23.json. Plancher de la v20 : 27 sur 30, 5 en trop au plus (dont 3 faux trous sur
+//     l'ombre du haut du carton en série 5).
 // Puis vérifie le calage sur des photos recadrées, qui faisaient voir la cible 25 ou 50 % trop petite avant la v12.
 //   node tests/detection.test.cjs            -> vérifie
 //   node tests/detection.test.cjs --record   -> réécrit les références (à ne faire qu'après validation visuelle)
@@ -24,6 +27,9 @@ const SEANCES = [
   { nom: "11/10/2026", ref: "attendu-2026-10-11.json", coups: [10, 5, 5, 5, 5],
     verite: "verite-2026-10-11.json", plancher: { trouves: 28, enTrop: 4 },
     photos: ["2026-10-11_serie1.jpg", "2026-10-11_serie2.jpg", "2026-10-11_serie3.jpg", "2026-10-11_serie4.jpg", "2026-10-11_serie5.jpg"] },
+  { nom: "23/10/2026", ref: "attendu-2026-10-23.json", coups: [5, 5, 5, 5, 5, 5],
+    verite: "verite-2026-10-23.json", plancher: { trouves: 27, enTrop: 5 },
+    photos: ["2026-10-23_serie1.jpg", "2026-10-23_serie2.jpg", "2026-10-23_serie3.jpg", "2026-10-23_serie4.jpg", "2026-10-23_serie5.jpg", "2026-10-23_serie6.jpg"] },
 ];
 const TOL_VERITE_MM = 3.0;   // un coup est « retrouvé » s'il est à moins de 3 mm de la position de l'utilisateur, dans la même série
 // photo recadrée de 200 px en haut -> même échelle, centre décalé de 200 px vers le haut
