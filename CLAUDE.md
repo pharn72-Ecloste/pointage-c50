@@ -43,8 +43,8 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v21` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v21`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v22` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v22`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,
@@ -95,9 +95,11 @@ avec ≈ et laisse l'utilisateur corriger les points à la main (`h.o`).
    Si le nombre de coups annoncé n'est pas atteint, le reste est signalé « non localisé », jamais inventé.
 7. **Centre de l'impact** : sur l'ouverture (le vide), pas sur les fibres arrachées.
 8. **Séries** : à la photo suivante, on recale sur la précédente puis on retire tout ce qui était
-   déjà troué. Seuls les nouveaux trous sont comptés. La rotation entre photos vient des quatre « 9 »
-   imprimés sur les axes (moyenne par paires opposées, insensible à un décalage du centre) ; les trous
-   n'affinent que le décalage. Sur un groupement serré, les trous seuls se trompaient de 4 à 5°.
+   déjà troué. Seuls les nouveaux trous sont comptés. Depuis la v22, la rotation entre photos vient de la
+   corrélation des trois anneaux de chiffres blancs (9, 8 et 7, entre 29 et 96 mm) relevés sur le calage brut
+   de chaque photo (`ringPolar`, `ringRotation`) ; à défaut, des quatre « 9 » (`digitAngles`). Les trous
+   n'affinent que le décalage. Sur un groupement serré, les trous seuls se trompaient de 4 à 5° ; les quatre « 9 »
+   seuls dérivaient sur le 23/10 (2,2° d'erreur à la photo 6), un trou près d'un chiffre tirant leur mesure.
 9. **Coups tombés dans une déchirure** (mode séries, seulement s'il manque des coups annoncés) : pour chaque
    déchirure, surplus = surface gagnée depuis la photo précédente − surface des nouveaux impacts comptés
    dedans. Chaque coup manquant va à la déchirure au plus grand surplus (au moins 0,4 trou isolé), en
@@ -124,8 +126,9 @@ jauge (149), dont 5 coups placés dans des déchirures ; et le calage sur deux r
 **Banc d'essai (vérité terrain).** Pour la séance du 11/10/2026, le test compare aussi l'appli aux 30 positions
 corrigées par l'utilisateur (`tests/verite-2026-10-11.json`) : coups retrouvés à 3 mm dans la bonne série, et
 impacts en trop. Niveau de la v14 : 28 sur 30, 4 en trop. Même banc pour la séance du 23/10/2026
-(`tests/verite-2026-10-23.json`) : 27 sur 30, 3 en trop depuis la v21 (ses photos 1 et 2 ont 1,4° de rotation réelle,
-d'où une tolérance de rotation de 2° pour cette séance). Le plancher échoue si l'on recule ; quand une
+(`tests/verite-2026-10-23.json`) : 28 sur 30, 2 en trop depuis la v22. Le test vérifie aussi chaque rotation entre
+photos à 0,2° près contre une référence (`rotRef`) mesurée hors de l'appli sur les trois anneaux de chiffres. Attention :
+la vérité terrain hérite du recalage de l'appli du téléphone pour les coups non déplacés, elle ne juge pas la rotation. Le plancher échoue si l'on recule ; quand une
 amélioration le dépasse, relève-le. Chaque nouvelle séance avec photos et sauvegarde `.json` s'ajoute de la
 même façon : c'est sur l'ensemble des séances qu'on règle la détection, jamais sur une seule.
 Dans la session cloud, si Playwright ne trouve pas son navigateur, lance le test avec
