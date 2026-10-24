@@ -165,6 +165,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
   <header class="top">
     <div class="brand">Pointage C50 <small>ISSF précision · 25/50 m</small></div>
     <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-lv" aria-selected="false">Longue-Vue</button>
       <button class="tab" role="tab" id="tab-an" aria-selected="true">Analyse</button>
       <button class="tab" role="tab" id="tab-hi" aria-selected="false">Historique</button>
     </nav>
@@ -301,6 +302,31 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
       </div>
     </div>
   </section>
+  <!-- LONGUE-VUE / DIRECT -->
+<section id="view-lv" hidden>
+  <div class="card">
+    <h2>Mode Longue-Vue · Analyse en direct</h2>
+    <p class="muted" style="margin-bottom:12px">Positionnez votre téléphone sur l'oculaire de la longue-vue. L'application surveille la cible, annonce vocalement les impacts dans vos écouteurs Bluetooth et établit le bilan de la série.</p>
+    
+    <div class="row" style="gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn primary" id="bLvCamStart">Démarrer la caméra</button>
+      <button class="btn ghost" id="bLvCamStop" disabled>Arrêter la caméra</button>
+      <button class="btn" id="bLvCal" disabled>Caler la cible</button>
+      <button class="btn primary" id="bLvAuto" disabled>Démarrer la surveillance</button>
+      <button class="btn ghost" id="bLvVoice">🔊 Voix : Active</button>
+    </div>
+
+    <div style="position:relative;background:#000;border-radius:12px;overflow:hidden;min-height:240px;display:flex;align-items:center;justify-content:center">
+      <video id="lvVideo" autoplay playsinline muted style="width:100%;max-height:60vh;object-fit:contain;display:none"></video>
+      <canvas id="lvCanvas" style="display:none"></canvas>
+      <div id="lvPlaceholder" class="muted" style="padding:40px;text-align:center">Caméra arrêtée</div>
+    </div>
+
+    <div id="lvStatus" style="margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--surface);font-family:var(--mono);font-size:13px">
+      Statut : En attente du démarrage de la caméra.
+    </div>
+  </div>
+</section>
 
   <!-- HISTORIQUE -->
   <section id="view-hi" hidden>
@@ -1443,7 +1469,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v18");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v19");
     renderHistory();
   }
 }
@@ -1801,7 +1827,125 @@ $("tab-an").onclick = () => showTab("an"); $("tab-hi").onclick = () => showTab("
 if (location.hash === "#historique") showTab("hi");
 
 // ---------- démarrage ----------
-loadSettings();
+// ---------- mode longue-vue / direct ----------
+let lvStream = null, lvVoiceEnabled = true, lvWatching = false, lvWatchTimer = null, lvKnownShotsCount = 0;
+
+function speakText(txt){
+  if (!lvVoiceEnabled || !('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(txt);
+  u.lang = 'fr-FR';
+  u.rate = 1.0;
+  window.speechSynthesis.speak(u);
+}
+
+$("bLvVoice").onclick = () => {
+  lvVoiceEnabled = !lvVoiceEnabled;
+  $("bLvVoice").textContent = lvVoiceEnabled ? "🔊 Voix : Active" : "🔇 Voix : Coupée";
+  speakText(lvVoiceEnabled ? "Voix activée" : "");
+};
+
+async function startLvCam(){
+  try {
+    lvStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    $("lvVideo").srcObject = lvStream;
+    $("lvVideo").style.display = "block";
+    $("lvPlaceholder").style.display = "none";
+    $("bLvCamStart").disabled = true;
+    $("bLvCamStop").disabled = false;
+    $("bLvCal").disabled = false;
+    $("bLvAuto").disabled = false;
+    $("lvStatus").textContent = "Statut : Caméra active. Alignez la cible C50 puis appuyez sur « Caler la cible ».";
+    speakText("Caméra activée. Veuillez caler la cible.");
+  } catch(err){
+    $("lvStatus").textContent = "Erreur caméra : " + err.message;
+  }
+}
+
+function stopLvCam(){
+  if (lvWatchTimer) clearInterval(lvWatchTimer);
+  lvWatching = false;
+  if (lvStream){ lvStream.getTracks().forEach(t => t.stop()); lvStream = null; }
+  $("lvVideo").style.display = "none";
+  $("lvPlaceholder").style.display = "block";
+  $("bLvCamStart").disabled = false;
+  $("bLvCamStop").disabled = true;
+  $("bLvCal").disabled = true;
+  $("bLvAuto").disabled = true;
+  $("bLvAuto").textContent = "Démarrer la surveillance";
+  $("lvStatus").textContent = "Statut : Caméra arrêtée.";
+  speakText("Caméra arrêtée.");
+}
+
+function convertClockDirection(x, y){
+  const angle = Math.atan2(x, y) * (180 / Math.PI);
+  let deg = (angle + 360) % 360;
+  let hour = Math.round(deg / 30);
+  if (hour === 0) hour = 12;
+  return hour;
+}
+
+function processLvFrame(){
+  if (!lvStream) return;
+  const video = $("lvVideo");
+  const canvas = $("lvCanvas");
+  if (!video.videoWidth || !video.videoHeight) return;
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const img = new Image();
+  img.onload = () => {
+    setImage(img, false);
+    const result = detectHoles(true);
+    if (result && result.shots){
+      const newShotsCount = result.shots.length;
+      if (newShotsCount > lvKnownShotsCount){
+        const lastShot = result.shots[result.shots.length - 1];
+        const [x, y] = lastShot;
+        const pts = scoreOfShot(x, y, calMm());
+        const hour = convertClockDirection(x, y);
+        const text = `Impact détecté ! ${pts} points à ${hour} heure${hour>1?"s":""}.`;
+        $("lvStatus").textContent = `Statut : ${text} (Total série : ${newShotsCount} tir${newShotsCount>1?"s":""})`;
+        speakText(text);
+        lvKnownShotsCount = newShotsCount;
+      }
+    }
+  };
+  img.src = canvas.toDataURL("image/jpeg", 0.85);
+}
+
+$("bLvCal").onclick = () => {
+  if (!lvStream) return;
+  processLvFrame();
+  bAutoCal.click();
+  lvKnownShotsCount = (state.shots || []).length;
+  $("lvStatus").textContent = "Statut : Cible calée. Prêt pour la surveillance.";
+  speakText("Cible calée. Prêt pour la surveillance.");
+};
+
+$("bLvAuto").onclick = () => {
+  if (lvWatching){
+    clearInterval(lvWatchTimer);
+    lvWatching = false;
+    $("bLvAuto").textContent = "Démarrer la surveillance";
+    $("lvStatus").textContent = "Statut : Surveillance en pause.";
+    speakText("Surveillance en pause.");
+  } else {
+    lvWatching = true;
+    lvKnownShotsCount = (state.shots || []).length;
+    $("bLvAuto").textContent = "Mettre en pause";
+    $("lvStatus").textContent = "Statut : Surveillance automatique active...";
+    speakText("Surveillance automatique activée.");
+    lvWatchTimer = setInterval(processLvFrame, 3000);
+  }
+};
+
+$("bLvCamStart").onclick = startLvCam;
+$("bLvCamStop").onclick = stopLvCam;
+  loadSettings();
 $("fDate").value = today();
 $("hMetric").value = ls.get("c50_hmetric", "sdr");
 let lastW = 0;
