@@ -20,7 +20,7 @@ Son matériel et ses habitudes :
   sur le porte-cible, avec le vide du pas de tir derrière.
 - Téléphone Android et PC Windows 10. L'appli est installée depuis Chrome.
 
-## Ce que fait l'application (version 21)
+## Ce que fait l'application (version 22)
 
 - Calage automatique de la cible, avec correction de perspective, et poignées de réglage manuel.
 - Détection des impacts, correction à la main : ajouter, supprimer, déplacer, annuler.
@@ -69,6 +69,17 @@ Son matériel et ses habitudes :
   trous d'ombre sont à 1,3–2 × le seuil et 1,9–4,9 d'allongement, les 13 vrais trous du clair à 3,3 × au moins et
   1,6 au plus. Résultat : 5 → 3 impacts en trop sur le 23/10 (série 5 : 48 points comme l'utilisateur, au lieu de 52),
   aucun changement sur les autres séances.
+- Rotation entre photos (v22). Mesure de référence hors de l'appli : corrélation angulaire, sur 360°, de chacun des trois
+  anneaux de chiffres (9, 8, 7) entre la photo k et la photo 1 ; les trois concordent à 0,05° près sur 11 paires de photos.
+  Sur le 23/10, la v21 (centre des pixels blancs des quatre « 9 ») donnait 1,44 / 0,77 / 0,73 / −0,11 / 0,70° pour
+  1,79 / 1,17 / 1,97 / 1,54 / 2,88° réels : un trou dans la fenêtre d'un « 9 » et la photo 1 penchée de 3,6° faisaient
+  manquer 0,3 à 0,5° à chaque photo, et l'erreur s'accumulait. Autres séances : écart de 0,33° au plus. La v22 corrèle les
+  anneaux sur le calage brut de chaque photo (pas sur le repère recalé : le décalage tiré des trous, près de 1 mm, faisait
+  tomber la corrélation de 0,8 à 0,5 et l'angle s'égarait), puis ajoute la rotation de la photo précédente. Résultat :
+  toutes les rotations à 0,1° de la référence ; 23/10 : 28 sur 30 et 2 en trop (au lieu de 27 et 3), un faux trou du
+  clair en série 4 disparaît (ancien trou mal retiré) et la déchirure en haut à droite est découpée en deux coups ;
+  écart au comptage de l'utilisateur : 1 point (série 3) au lieu de 2. Aucun changement de points ni de comptage sur
+  les autres séances ; des trous bougent de moins de 1 mm, un faux impact du 11/10 (série 5, au bord du visuel) de 1,8 mm.
 
 ## Les mesures de terrain
 

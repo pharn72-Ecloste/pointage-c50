@@ -951,6 +951,11 @@ function prepareNextSeries(){
   detectHoles(true);
   state.prevHoleGrid = state.curGrid.slice();     // trous réellement vus sur cette photo (sans les disques ci-dessous)
   state.prevDigits = digitAngles(cal);            // orientation de la cible, pour recaler la photo suivante
+  // anneaux de chiffres (v22) : relevés sur le calage brut de la photo, avant recalage, avec la rotation qui l'amène sur
+  // la photo 1. Le décalage donné par les trous déplace le centre de près de 1 mm : relevés dans le repère recalé, les
+  // anneaux se ressemblaient moins d'une photo à l'autre (corrélation 0,5 au lieu de 0,8) et l'angle s'égarait.
+  const ref = state.ringRef && state.ringRef.img === state.img ? state.ringRef : null;
+  state.prevRings = ref ? ref.rings : ringPolar(cal); state.prevRingTh = ref ? ref.th : 0;
   const G = GRID_N, grid = state.curGrid.slice(), rc = Math.ceil((calMm()/2 + 0.5)/GRID_C);
   currentShots().forEach(p => { const cx = Math.floor((p.x+260)/GRID_C), cy = Math.floor((-p.y+260)/GRID_C);
     for (let dy=-rc;dy<=rc;dy++) for (let dx=-rc;dx<=rc;dx++){ if (dx*dx+dy*dy > rc*rc) continue;
@@ -985,19 +990,59 @@ function digitAngles(cal){
   const thr = med + 0.5*(hi - med);
   return [0,90,180,270].map(a0 => { let sa=0, n=0; for (const [b,a,v] of samp) if (b===a0 && v > thr){ sa += a; n++; } return n >= 30 ? sa/n - a0 : null; });
 }
+// Orientation de la cible, mesure principale depuis la v22 : image « polaire » des trois anneaux de chiffres blancs
+// (9, 8 et 7, entre 29 et 96 mm du centre) sur 360°. On cherche le décalage angulaire qui superpose au mieux celle de la
+// photo précédente (corrélation). Le centre des pixels blancs des quatre « 9 » (digitAngles) se laissait tirer par un trou
+// ou par le bord de sa fenêtre : sur la séance du 23/10, il manquait 0,3 à 0,5° à chaque photo, et l'erreur s'accumulait
+// jusqu'à 2,2° sur la photo 6. Les trois anneaux, corrélés séparément, donnent le même angle à 0,05° près sur les 5 séances.
+const RING_BANDS = [[29, 46], [54, 71], [79, 96]], RING_NA = 1800;     // pas angulaire 0,2°, pas radial 1 mm
+function ringPolar(cal){
+  const img = state.img; if (!cal || !img) return null;
+  const pts = []; let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const [r0, r1] of RING_BANDS) for (let r = r0; r <= r1; r++) for (let k = 0; k < RING_NA; k++){
+    const t = k/RING_NA*2*Math.PI, p = mmToImg(cal, r*Math.cos(t), r*Math.sin(t)); pts.push(p);
+    if (p.x < x0) x0 = p.x; if (p.y < y0) y0 = p.y; if (p.x > x1) x1 = p.x; if (p.y > y1) y1 = p.y; }
+  const bx0 = Math.max(0, Math.floor(x0)), by0 = Math.max(0, Math.floor(y0));
+  const bx1 = Math.min(img.width-1, Math.ceil(x1)), by1 = Math.min(img.height-1, Math.ceil(y1));
+  if (bx1-bx0 < 10 || by1-by0 < 10) return null;
+  const bw = bx1-bx0+1, d = img.getContext("2d", {willReadFrequently:true}).getImageData(bx0, by0, bw, by1-by0+1).data;
+  const v = new Float32Array(pts.length);
+  pts.forEach((p, i) => { const xi = Math.round(p.x)-bx0, yi = Math.round(p.y)-by0;
+    if (xi<0||yi<0||xi>=bw||yi>by1-by0){ v[i] = NaN; return; } const j = (yi*bw+xi)*4; v[i] = d[j]*0.3 + d[j+1]*0.59 + d[j+2]*0.11; });
+  return v;
+}
+// Rotation (°, sens trigonométrique) qui amène les anneaux de la photo précédente sur ceux de cette photo, avec la
+// corrélation obtenue ; null si les anneaux ne se ressemblent pas assez (photo floue, autre modèle de cible).
+function ringRotation(A, B){
+  if (!A || !B || A.length !== B.length) return null;
+  const rows = A.length/RING_NA;
+  const ncc = s => { let sa=0, sb=0, saa=0, sbb=0, sab=0, n=0;
+    for (let r = 0; r < rows; r++){ const o = r*RING_NA;
+      for (let k = 0; k < RING_NA; k++){ const a = A[o+k], b = B[o + (k + s + RING_NA) % RING_NA]; if (a !== a || b !== b) continue;
+        sa+=a; sb+=b; saa+=a*a; sbb+=b*b; sab+=a*b; n++; } }
+    if (n < 1000) return -1; const den = Math.sqrt((saa - sa*sa/n)*(sbb - sb*sb/n)); return den > 0 ? (sab - sa*sb/n)/den : -1; };
+  let best = [-2, 0];
+  for (let s = -40; s <= 40; s += 2){ const c = ncc(s); if (c > best[0]) best = [c, s]; }       // ± 8°, pas de 0,4°
+  for (let s = best[1]-2; s <= best[1]+2; s++){ const c = ncc(s); if (c > best[0]) best = [c, s]; }
+  if (best[0] < 0.3) return null;
+  const cm = ncc(best[1]-1), cp = ncc(best[1]+1), den = cm - 2*best[0] + cp, off = den < 0 ? (cm - cp)/(2*den) : 0;
+  return {deg: (best[1] + off)*360/RING_NA, corr: best[0]};
+}
 function alignToPrev(){
   const pts = state.prevPts, g = state.curGrid; if (!pts || !pts.length || !g) return;
   const G = GRID_N, look = (x,y) => { const gx=Math.floor((x+260)/GRID_C), gy=Math.floor((y+260)/GRID_C); return (gx>=0&&gy>=0&&gx<G&&gy<G) ? g[gy*G+gx] : 0; };
   const score = (th, tx, ty) => { const c=Math.cos(th), sn=Math.sin(th); let n=0; for (const [x,y] of pts) n += look(c*x - sn*y + tx, sn*x + c*y + ty); return n; };
-  // Rotation donnée par les chiffres imprimés ; sinon, par les trous seuls. Un décalage du centre fait tourner en sens
-  // opposé deux chiffres opposés (0,5 mm ≈ 0,8° à 37,5 mm) : la moyenne d'une paire opposée ne garde que la rotation.
-  // Il faut une paire complète, et les deux paires d'accord à 1° près quand elles existent toutes les deux.
-  let thD = null;
-  const cur = digitAngles(getCal()), prv = state.prevDigits;
+  // Rotation donnée par les anneaux de chiffres (ringRotation) ; à défaut par les quatre « 9 » ; sinon par les trous seuls.
+  // Pour les « 9 » : un décalage du centre fait tourner en sens opposé deux chiffres opposés (0,5 mm ≈ 0,8° à 37,5 mm),
+  // la moyenne d'une paire opposée ne garde que la rotation. Il faut une paire complète, et les deux paires d'accord à 1°.
+  let thD = null, src = null;
+  const rings = ringPolar(getCal()), rr = ringRotation(state.prevRings, rings);
+  if (rr){ thD = (state.prevRingTh || 0) - rr.deg*Math.PI/180; src = "anneaux"; }     // repère des trous : y vers le bas, sens inverse
+  const cur = thD == null ? digitAngles(getCal()) : null, prv = state.prevDigits;
   if (cur && prv){ const dd = cur.map((v,i) => v != null && prv[i] != null ? v - prv[i] : null);
     const pairs = [[0,2],[1,3]].filter(([i,j]) => dd[i] != null && dd[j] != null).map(([i,j]) => (dd[i]+dd[j])/2);
     if (pairs.length === 1 || (pairs.length === 2 && Math.abs(pairs[0]-pairs[1]) <= 1))
-      thD = -pairs.reduce((a,v)=>a+v,0)/pairs.length*Math.PI/180; }                   // repère des trous : y vers le bas, sens inverse
+    { thD = -pairs.reduce((a,v)=>a+v,0)/pairs.length*Math.PI/180; src = "chiffres"; } }
   const s0 = score(0,0,0); let best = thD != null ? {v:score(thD,0,0), th:thD, tx:0, ty:0} : {v:s0, th:0, tx:0, ty:0};
   const angles = thD != null ? [thD] : []; if (thD == null) for (let d=-5; d<=5; d+=0.5) angles.push(d*Math.PI/180);
   for (const th of angles) for (let tx=-4; tx<=4; tx+=0.5) for (let ty=-4; ty<=4; ty+=0.5){
@@ -1005,8 +1050,9 @@ function alignToPrev(){
   const b0 = {...best}, dSpan = thD != null ? 0 : 0.5;        // angle des chiffres : les trous n'affinent que le décalage
   for (let d=-dSpan; d<=dSpan+1e-9; d+=0.1) for (let tx=-0.5; tx<=0.5; tx+=0.25) for (let ty=-0.5; ty<=0.5; ty+=0.25){
     const th = b0.th + d*Math.PI/180, v = score(th, b0.tx+tx, b0.ty+ty); if (v > best.v) best = {v, th, tx:b0.tx+tx, ty:b0.ty+ty}; }
-  state.lastAlign = {rot: best.th*180/Math.PI, tx: best.tx, ty: best.ty, gain: s0 ? best.v/s0 : 0, chiffres: thD != null};
+  state.lastAlign = {rot: best.th*180/Math.PI, tx: best.tx, ty: best.ty, gain: s0 ? best.v/s0 : 0, chiffres: thD != null, source: src, corr: rr ? +rr.corr.toFixed(2) : null};
   if (thD == null && best.v < s0*1.05 + 5) return;
+  state.ringRef = {img: state.img, rings, th: best.th};
   const cal = getCal(), [a,b,c,d] = cal.M, co = Math.cos(best.th), sn = Math.sin(best.th);
   const cx = cal.chx + a*best.tx + b*best.ty, cy = cal.chy + c*best.tx + d*best.ty;
   state.handles = handlesFrom(cx, cy, [a*co + b*sn, -a*sn + b*co, c*co + d*sn, -c*sn + d*co]);
@@ -1251,7 +1297,7 @@ stage.addEventListener("drop", e => { e.preventDefault(); loadFile(e.dataTransfe
 
 function setImage(canvas, isSample, next){
   state.img = canvas; state.sample = isSample; state.undo = []; $("bUndo").disabled = true;
-  if (!next){ state.curSeries = 0; state.prevGrid = null; state.prevHoleGrid = null; state.prevDigits = null; state.prevPts = null; state.carry = null; state.a1mm = null; state.holeHue = null; state.lastAlign = null; }
+  if (!next){ state.curSeries = 0; state.prevGrid = null; state.prevHoleGrid = null; state.prevDigits = null; state.prevRings = null; state.prevRingTh = 0; state.ringRef = null; state.prevPts = null; state.carry = null; state.a1mm = null; state.holeHue = null; state.lastAlign = null; }
   $("badge").hidden = !isSample && !next;
   $("badge").textContent = isSample ? "Exemple · importe ta photo" : `Série ${state.curSeries+1}`;
   const ok = calibrate(), doute = ok && state.calSuspect;
@@ -1479,7 +1525,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v21");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v22");
     renderHistory();
   }
 }

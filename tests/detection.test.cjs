@@ -9,8 +9,12 @@
 //     4 en trop au plus) est le niveau de la v14 : le test échoue s'il recule, pas s'il progresse.
 //   23/10/2026, 15 m, P320 X-Carry, fond bleu : 6 photos de 5 coups, référence tests/attendu-2026-10-23.json et vérité
 //     terrain tests/verite-2026-10-23.json. v20 : 27 sur 30, 5 en trop (dont 3 faux trous sur l'ombre du haut du carton,
-//     en série 5) ; v21 : l'ombre est rejetée, 27 sur 30 et 3 en trop, plancher actuel. Les photos 1 et 2 sont prises
-//     avec 1,4° d'écart réel (1,7° mesuré sur les trous des deux photos analysées seules) : tolérance de rotation 2°.
+//     en série 5) ; v21 : l'ombre est rejetée, 27 sur 30 et 3 en trop ; v22 : rotation juste, 28 sur 30 et 2 en trop,
+//     plancher actuel.
+// Rotation entre photos (v22) : chaque photo est comparée à l'angle de référence `rotRef` (°, par rapport à la photo 1,
+//   signe de l'appli), à 0,2° près. Référence mesurée hors de l'appli par corrélation angulaire de chacun des trois
+//   anneaux de chiffres (9, 8 et 7) entre la photo k et la photo 1 analysées seules ; les trois anneaux concordent à
+//   0,05° près. Sur le 23/10, la v21 (centre des quatre « 9 ») se trompait de 0,35° (photo 2) à 2,2° (photo 6).
 // Puis vérifie le calage sur des photos recadrées, qui faisaient voir la cible 25 ou 50 % trop petite avant la v12.
 //   node tests/detection.test.cjs            -> vérifie
 //   node tests/detection.test.cjs --record   -> réécrit les références (à ne faire qu'après validation visuelle)
@@ -21,15 +25,15 @@ catch (e) { console.error("Playwright manquant : lance `npm install` puis `npx p
 
 const ROOT = path.join(__dirname, ".."), PHOTOS = path.join(__dirname, "photos");
 const SEANCES = [
-  { nom: "02/10/2026", ref: "attendu.json", photos: ["2026-10-02_serie1.jpg", "2026-10-02_serie2.jpg", "2026-10-02_serie3.jpg"] },
-  { nom: "04/10/2026", ref: "attendu-2026-10-04.json", photos: ["2026-10-04_serie1.jpg", "2026-10-04_serie2.jpg"] },
-  { nom: "DDM4 .300 BLK", ref: "attendu-ddm4-300blk.json", cal: "7.82|blk", coups: 5, comptage: [50, 100, 149],
+  { nom: "02/10/2026", ref: "attendu.json", rotRef: [null, -0.37, -0.41], photos: ["2026-10-02_serie1.jpg", "2026-10-02_serie2.jpg", "2026-10-02_serie3.jpg"] },
+  { nom: "04/10/2026", ref: "attendu-2026-10-04.json", rotRef: [null, -0.84], photos: ["2026-10-04_serie1.jpg", "2026-10-04_serie2.jpg"] },
+  { nom: "DDM4 .300 BLK", ref: "attendu-ddm4-300blk.json", cal: "7.82|blk", coups: 5, comptage: [50, 100, 149], rotRef: [null, -0.30, 0.60],
     photos: ["ddm4-300blk-25m_serie1.jpg", "ddm4-300blk-25m_serie2.jpg", "ddm4-300blk-25m_serie3.jpg"] },
   { nom: "11/10/2026", ref: "attendu-2026-10-11.json", coups: [10, 5, 5, 5, 5],
-    verite: "verite-2026-10-11.json", plancher: { trouves: 28, enTrop: 4 },
+    verite: "verite-2026-10-11.json", plancher: { trouves: 28, enTrop: 4 }, rotRef: [null, -0.97, -0.30, -0.44, -0.44],
     photos: ["2026-10-11_serie1.jpg", "2026-10-11_serie2.jpg", "2026-10-11_serie3.jpg", "2026-10-11_serie4.jpg", "2026-10-11_serie5.jpg"] },
   { nom: "23/10/2026", ref: "attendu-2026-10-23.json", coups: [5, 5, 5, 5, 5, 5],
-    verite: "verite-2026-10-23.json", plancher: { trouves: 27, enTrop: 3 }, rotMax: 2,
+    verite: "verite-2026-10-23.json", plancher: { trouves: 28, enTrop: 2 }, rotRef: [null, 1.79, 1.18, 1.98, 1.54, 2.88],
     photos: ["2026-10-23_serie1.jpg", "2026-10-23_serie2.jpg", "2026-10-23_serie3.jpg", "2026-10-23_serie4.jpg", "2026-10-23_serie5.jpg", "2026-10-23_serie6.jpg"] },
 ];
 const TOL_VERITE_MM = 3.0;   // un coup est « retrouvé » s'il est à moins de 3 mm de la position de l'utilisateur, dans la même série
@@ -60,7 +64,7 @@ const TOL_MM = 1.0;   // tolérance sur la position des trous isolés
       mode: c.state.detectMode,
       parSerie: shots.reduce((a, s, i) => { const k = c.state.holes[i].s || 0; a[k] = (a[k] || 0) + 1; return a; }, {}),
       points: +document.getElementById("sTot").textContent,
-      alignement: c.state.lastAlign ? { rot: +c.state.lastAlign.rot.toFixed(1), tx: c.state.lastAlign.tx, ty: c.state.lastAlign.ty } : null,
+      alignement: c.state.lastAlign ? { rot: +c.state.lastAlign.rot.toFixed(2), tx: c.state.lastAlign.tx, ty: c.state.lastAlign.ty } : null,
       perspectiveMm: c.state.persp.map(v => +(v * 10000).toFixed(2)),         // décalage du vrai centre, en mm (w·R²)
       tous: shots.map((s, i) => [c.state.holes[i].s || 0, +s.x.toFixed(1), +s.y.toFixed(1)]),
       isoles: shots.map((s, i) => ({ s: c.state.holes[i].s || 0, split: !!c.state.holes[i].split, x: +s.x.toFixed(1), y: +s.y.toFixed(1) })).filter(h => !h.split).map(h => [h.s, h.x, h.y]),
@@ -114,8 +118,8 @@ const TOL_MM = 1.0;   // tolérance sur la position des trous isolés
       const far = e.isoles.filter(([s, x, y]) => !r.isoles.some(([s2, x2, y2]) => s2 === s && Math.hypot(x2 - x, y2 - y) <= TOL_MM));
       check(`trous isolés retrouvés à ${TOL_MM} mm près (${e.isoles.length})`, far.length === 0, `${far.length} manquant(s) ou déplacé(s) : ${JSON.stringify(far)}`);
       if (se.comptage) check(`même total que le comptage de l'utilisateur (${se.comptage[i]})`, r.points === se.comptage[i], `${r.points}`);
-      const rotMax = se.rotMax || 1;
-      if (e.alignement) check(`recalage entre photos < 1,5 mm et < ${rotMax}°`, Math.abs(r.alignement.tx) <= 1.5 && Math.abs(r.alignement.ty) <= 1.5 && Math.abs(r.alignement.rot) <= rotMax, JSON.stringify(r.alignement));
+      if (e.alignement) check("décalage entre photos < 1,5 mm", Math.abs(r.alignement.tx) <= 1.5 && Math.abs(r.alignement.ty) <= 1.5, JSON.stringify(r.alignement));
+      if (se.rotRef && se.rotRef[i] != null) check(`rotation ${se.rotRef[i]}° à 0,2° près`, r.alignement && Math.abs(r.alignement.rot - se.rotRef[i]) <= 0.2, JSON.stringify(r.alignement));
     });
   });
   SEANCES.forEach((se, k) => {
