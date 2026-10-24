@@ -795,7 +795,7 @@ function detectHoles(rawOnly){
   //    Ouverture visible mesurée au pied à coulisse : 5 à 8 mm pour du 9 mm, soit 0,55 à 0,9 calibre ;
   //    avec la couronne de fibres arrachées, jusqu'à 1,2 calibre.
   const aLo = Math.PI*(0.25*cal_mm*pm)**2, aHi = Math.PI*(0.6*cal_mm*pm)**2, minA = 0.45*aLo;
-  const edgeMin = Math.max(10, 0.3*gradRef.T), rejected = {bord:0, flou:0, taille:0, chiffre:0};
+  const edgeMin = Math.max(10, 0.3*gradRef.T), rejected = {bord:0, flou:0, taille:0, chiffre:0, ombre:0};
   let blobs = comps.filter(cp => {
     if (cp.area < minA){ return false; }
     const mg = Math.round(4*pm);   // marge de 4 mm : bord de photo, baguette du porte-cible
@@ -816,6 +816,16 @@ function detectHoles(rawOnly){
       const gx = Math.abs(gv[k+2]-gv[k-2]), gy = Math.abs(gv[k+2*bw]-gv[k-2*bw]); g += Math.max(gx,gy); nb++; }
     cp.edge = nb ? g/nb : 0;
     if (holeHue == null && cp.edge < edgeMin){ rejected.flou++; return false; }
+    // ombre portée sur un cordon de la zone claire (carton courbé en haut, 23/10) : l'ombre épaissit le trait imprimé, qui
+    // survit au nettoyage. Le morceau est allongé le long du cordon et son contour, net seulement côté encre, reste mou.
+    // Sur les 5 séances du banc : faux trous d'ombre, contour 1,3 à 2 × le seuil et allongement 1,9 à 4,9 ; vrais trous
+    // du clair, contour 3,3 × le seuil au moins et allongement 1,6 au plus. Il faut les deux défauts pour rejeter.
+    if (holeHue == null && Math.hypot(cp.ux, cp.uy) > R_BLACK && cp.edge < 2.5*edgeMin){
+      let xs=0, ys=0, xx=0, yy=0, xy=0; for (const k of cp.px){ const x = k%bw, y = (k/bw)|0; xs+=x; ys+=y; xx+=x*x; yy+=y*y; xy+=x*y; }
+      const n = cp.area, mx = xs/n, my = ys/n, a = xx/n-mx*mx, b = yy/n-my*my, c = xy/n-mx*my, dd = Math.sqrt(Math.max(0, (a-b)**2/4 + c*c));
+      const elong = Math.sqrt((a+b)/2 + dd) / Math.sqrt(Math.max(1e-6, (a+b)/2 - dd));
+      if (elong > 1.7){ rejected.ombre++; return false; }
+    }
     return true;
   });
   // Aire d'un trou isolé, estimée séparément sur le noir et sur le clair : dans le noir, la couronne de fibres
@@ -1469,7 +1479,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v20");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v21");
     renderHistory();
   }
 }

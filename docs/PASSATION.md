@@ -20,7 +20,7 @@ Son matériel et ses habitudes :
   sur le porte-cible, avec le vide du pas de tir derrière.
 - Téléphone Android et PC Windows 10. L'appli est installée depuis Chrome.
 
-## Ce que fait l'application (version 20)
+## Ce que fait l'application (version 21)
 
 - Calage automatique de la cible, avec correction de perspective, et poignées de réglage manuel.
 - Détection des impacts, correction à la main : ajouter, supprimer, déplacer, annuler.
@@ -61,6 +61,14 @@ Son matériel et ses habitudes :
   sur 18 tombent à moins de 3 mm d'un coup noté, et 3 coups sur 20 sont manqués ; une image décalée et éclaircie,
   vue deux fois, a créé un faux trou. Environ 2 s de calcul par image sur la machine de test, sans doute plus sur le
   téléphone. **Rien n'a été testé à travers une longue-vue.**
+- Banc d'essai élargi (v21) : séance du 23/10/2026 (P320 X-Carry, 15 m, fond bleu, 6 × 5 coups), 27 coups sur 30 à 3 mm.
+  Ses erreurs : trois faux trous sur l'ombre du carton courbé en haut de la photo 5, la déchirure à droite du centre
+  du 10 (trois coups à moins de 8 mm, en séries 1, 3 et 5 : lambeaux qui bougent d'une photo à l'autre), deux trous
+  collés en série 4 comptés pour un, un trou sur le « 9 » coupé en deux. La v21 rejette, dans la zone claire, un
+  candidat au contour mou (moins de 2,5 × le seuil de netteté) ET allongé (plus de 1,7) : sur les 5 séances, les faux
+  trous d'ombre sont à 1,3–2 × le seuil et 1,9–4,9 d'allongement, les 13 vrais trous du clair à 3,3 × au moins et
+  1,6 au plus. Résultat : 5 → 3 impacts en trop sur le 23/10 (série 5 : 48 points comme l'utilisateur, au lieu de 52),
+  aucun changement sur les autres séances.
 
 ## Les mesures de terrain
 

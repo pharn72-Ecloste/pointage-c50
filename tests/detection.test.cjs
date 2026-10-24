@@ -7,6 +7,10 @@
 //     et vérité terrain tests/verite-2026-10-11.json : les 30 positions de l'utilisateur après correction.
 //     Banc d'essai : on compte les coups retrouvés à 3 mm près dans la bonne série. Le plancher (28 sur 30,
 //     4 en trop au plus) est le niveau de la v14 : le test échoue s'il recule, pas s'il progresse.
+//   23/10/2026, 15 m, P320 X-Carry, fond bleu : 6 photos de 5 coups, référence tests/attendu-2026-10-23.json et vérité
+//     terrain tests/verite-2026-10-23.json. v20 : 27 sur 30, 5 en trop (dont 3 faux trous sur l'ombre du haut du carton,
+//     en série 5) ; v21 : l'ombre est rejetée, 27 sur 30 et 3 en trop, plancher actuel. Les photos 1 et 2 sont prises
+//     avec 1,4° d'écart réel (1,7° mesuré sur les trous des deux photos analysées seules) : tolérance de rotation 2°.
 // Puis vérifie le calage sur des photos recadrées, qui faisaient voir la cible 25 ou 50 % trop petite avant la v12.
 //   node tests/detection.test.cjs            -> vérifie
 //   node tests/detection.test.cjs --record   -> réécrit les références (à ne faire qu'après validation visuelle)
@@ -24,6 +28,9 @@ const SEANCES = [
   { nom: "11/10/2026", ref: "attendu-2026-10-11.json", coups: [10, 5, 5, 5, 5],
     verite: "verite-2026-10-11.json", plancher: { trouves: 28, enTrop: 4 },
     photos: ["2026-10-11_serie1.jpg", "2026-10-11_serie2.jpg", "2026-10-11_serie3.jpg", "2026-10-11_serie4.jpg", "2026-10-11_serie5.jpg"] },
+  { nom: "23/10/2026", ref: "attendu-2026-10-23.json", coups: [5, 5, 5, 5, 5, 5],
+    verite: "verite-2026-10-23.json", plancher: { trouves: 27, enTrop: 3 }, rotMax: 2,
+    photos: ["2026-10-23_serie1.jpg", "2026-10-23_serie2.jpg", "2026-10-23_serie3.jpg", "2026-10-23_serie4.jpg", "2026-10-23_serie5.jpg", "2026-10-23_serie6.jpg"] },
 ];
 const TOL_VERITE_MM = 3.0;   // un coup est « retrouvé » s'il est à moins de 3 mm de la position de l'utilisateur, dans la même série
 // photo recadrée de 200 px en haut -> même échelle, centre décalé de 200 px vers le haut
@@ -107,7 +114,8 @@ const TOL_MM = 1.0;   // tolérance sur la position des trous isolés
       const far = e.isoles.filter(([s, x, y]) => !r.isoles.some(([s2, x2, y2]) => s2 === s && Math.hypot(x2 - x, y2 - y) <= TOL_MM));
       check(`trous isolés retrouvés à ${TOL_MM} mm près (${e.isoles.length})`, far.length === 0, `${far.length} manquant(s) ou déplacé(s) : ${JSON.stringify(far)}`);
       if (se.comptage) check(`même total que le comptage de l'utilisateur (${se.comptage[i]})`, r.points === se.comptage[i], `${r.points}`);
-      if (e.alignement) check("recalage entre photos < 1,5 mm et < 1°", Math.abs(r.alignement.tx) <= 1.5 && Math.abs(r.alignement.ty) <= 1.5 && Math.abs(r.alignement.rot) <= 1, JSON.stringify(r.alignement));
+      const rotMax = se.rotMax || 1;
+      if (e.alignement) check(`recalage entre photos < 1,5 mm et < ${rotMax}°`, Math.abs(r.alignement.tx) <= 1.5 && Math.abs(r.alignement.ty) <= 1.5 && Math.abs(r.alignement.rot) <= rotMax, JSON.stringify(r.alignement));
     });
   });
   SEANCES.forEach((se, k) => {
