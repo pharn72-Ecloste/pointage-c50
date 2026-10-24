@@ -20,7 +20,7 @@ Son matériel et ses habitudes :
   sur le porte-cible, avec le vide du pas de tir derrière.
 - Téléphone Android et PC Windows 10. L'appli est installée depuis Chrome.
 
-## Ce que fait l'application (version 18)
+## Ce que fait l'application (version 20)
 
 - Calage automatique de la cible, avec correction de perspective, et poignées de réglage manuel.
 - Détection des impacts, correction à la main : ajouter, supprimer, déplacer, annuler.
@@ -52,6 +52,15 @@ Son matériel et ses habitudes :
   et en mm pour une même distance : en mm, mêler 10 et 25 m faisait monter la courbe sans que le tir change. Un cumul
   depuis la première séance a été écarté : il devient inerte et cache les progrès. L'info-bulle reste dans le cadre
   et touche aussi le premier et le dernier point.
+- Mode Longue-Vue (v19 écrit par l'utilisateur, corrigé en v20) : la caméra filme la cible à l'oculaire. « Caler la
+  cible » prend l'image de référence et exige les trois cordons (r = 50, 75, 100). Toutes les 3 s, l'image passe par le
+  mode séries, avec 1 coup annoncé et les coups estimés (est) ignorés. Un trou nouveau n'est annoncé à la voix (points,
+  heure, « environ » près d'un cordon) qu'après deux images de suite au même endroit, à 4 mm près. Sinon, l'état est
+  rendu tel qu'avant l'image. La séance se retrouve dans l'onglet Analyse. Rejeu des vraies séries (plusieurs coups
+  entre deux images, ce qui n'est pas le cas réel) : aucune annonce sur une cible inchangée ; le 11/10, 17 annonces
+  sur 18 tombent à moins de 3 mm d'un coup noté, et 3 coups sur 20 sont manqués ; une image décalée et éclaircie,
+  vue deux fois, a créé un faux trou. Environ 2 s de calcul par image sur la machine de test, sans doute plus sur le
+  téléphone. **Rien n'a été testé à travers une longue-vue.**
 
 ## Les mesures de terrain
 

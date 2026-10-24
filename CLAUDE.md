@@ -43,8 +43,8 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v18` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v18`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v20` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v20`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,
@@ -148,6 +148,8 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
   vus une série trop tard). Un critère de teinte essayé seul a fait pire (26 sur 30) : à régler sur plusieurs séances.
 - La détection reste sensible à de petits écarts de calage : un décalage de quelques dixièmes de mm
   suffit à faire apparaître un fragment de chiffre ou à changer le découpage d'une déchirure.
+- Mode Longue-Vue : jamais testé à travers une longue-vue, seulement en rejouant des photos. Un reflet ou un décalage
+  qui se répète sur deux images peut être annoncé comme impact ; une balle passée dans un trou existant ne l'est pas.
 - La rotation de la première photo n'est pas corrigée (seule la rotation entre photos d'une série l'est) :
   une photo penchée fausse la répartition horizontal/vertical, pas le score.
 

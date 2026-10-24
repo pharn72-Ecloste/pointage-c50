@@ -306,7 +306,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
 <section id="view-lv" hidden>
   <div class="card">
     <h2>Mode Longue-Vue · Analyse en direct</h2>
-    <p class="muted" style="margin-bottom:12px">Positionnez votre téléphone sur l'oculaire de la longue-vue. L'application surveille la cible, annonce vocalement les impacts dans vos écouteurs Bluetooth et établit le bilan de la série.</p>
+    <p class="muted" style="margin-bottom:12px">Place ton téléphone sur l'oculaire de la longue-vue, au plus faible grossissement, avec tout le visuel noir dans l'image. L'application surveille la cible, annonce chaque nouvel impact dans tes écouteurs et donne le bilan ; la séance se retrouve ensuite dans l'onglet Analyse, à vérifier et enregistrer. Mode d'essai : pas encore validé à travers une longue-vue.</p>
     
     <div class="row" style="gap:10px;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn primary" id="bLvCamStart">Démarrer la caméra</button>
@@ -1469,7 +1469,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v19");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v20");
     renderHistory();
   }
 }
@@ -1818,26 +1818,41 @@ $("bImpOk").onclick = async () => {
 };
 
 // ---------- onglets ----------
+// état du mode longue-vue (déclaré ici : showTab peut être appelé au chargement)
+let lvStream = null, lvVoiceEnabled = true, lvWatching = false, lvTimer = null, lvBusy = false, lvPending = null, lvFails = 0, lvRef = false;
+const LV_PERIOD = 3000, LV_MATCH_MM = 4;
+let lvTouched = false;      // le mode direct a changé la photo pendant que l'onglet Analyse était caché : recadrer au retour
 function showTab(t){
-  $("tab-an").setAttribute("aria-selected", t==="an"); $("tab-hi").setAttribute("aria-selected", t==="hi");
-  $("view-an").hidden = t!=="an"; $("view-hi").hidden = t!=="hi";
-  if (t==="an") resize(); else renderHistory();
+  ["an","hi","lv"].forEach(k => { $("tab-"+k).setAttribute("aria-selected", t===k); $("view-"+k).hidden = t!==k; });
+  if (t!=="lv" && lvWatching){ lvPause(); lvStatus("Surveillance en pause (onglet quitté)." + lvBilan()); }
+  if (t==="an"){ resize(); if (lvTouched){ lvTouched = false; fit(); refresh(); } }
+  else if (t==="hi") renderHistory();
 }
-$("tab-an").onclick = () => showTab("an"); $("tab-hi").onclick = () => showTab("hi");
+$("tab-an").onclick = () => showTab("an"); $("tab-hi").onclick = () => showTab("hi"); $("tab-lv").onclick = () => showTab("lv");
 if (location.hash === "#historique") showTab("hi");
 
 // ---------- démarrage ----------
 // ---------- mode longue-vue / direct ----------
-let lvStream = null, lvVoiceEnabled = true, lvWatching = false, lvWatchTimer = null, lvKnownShotsCount = 0;
+// Le téléphone filme la cible à travers la longue-vue. « Caler la cible » prend l'image de référence et la cale comme
+// une photo ; ensuite, toutes les 3 s, l'image de la caméra passe par le mode séries : on recale sur la référence et on
+// ne garde que les trous nouveaux. Un trou n'est annoncé qu'après l'avoir vu sur deux images de suite au même endroit
+// (à 4 mm près) : un reflet ou un flou d'une seule image ne déclenche rien. Sans trou nouveau, l'état est remis tel
+// qu'avant l'image : la référence ne bouge pas. Chaque coup annoncé devient une série ; à la fin, la séance est dans
+// l'onglet Analyse, à vérifier et enregistrer. Pendant l'analyse d'une image, le nombre de coups annoncé vaut 1 : au
+// tir lent, un seul coup part entre deux images, et chaque trou nouveau compte pour un (à 0, la taille des trous servait
+// à les compter et une déchirure en donnait 2 ou 3). Les coups placés d'office dans une déchirure (est) sont ignorés :
+// une balle passée dans un trou existant n'est pas annoncée.
+// Non validé à travers une longue-vue : aucune image prise à l'oculaire n'a encore été testée.
 
 function speakText(txt){
-  if (!lvVoiceEnabled || !('speechSynthesis' in window)) return;
+  if (!txt || !lvVoiceEnabled || !('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(txt);
   u.lang = 'fr-FR';
   u.rate = 1.0;
   window.speechSynthesis.speak(u);
 }
+function lvStatus(t){ $("lvStatus").textContent = "Statut : " + t; }
 
 $("bLvVoice").onclick = () => {
   lvVoiceEnabled = !lvVoiceEnabled;
@@ -1847,24 +1862,28 @@ $("bLvVoice").onclick = () => {
 
 async function startLvCam(){
   try {
-    lvStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    lvStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: {ideal: 1920}, height: {ideal: 1080} }, audio: false });
     $("lvVideo").srcObject = lvStream;
     $("lvVideo").style.display = "block";
     $("lvPlaceholder").style.display = "none";
     $("bLvCamStart").disabled = true;
     $("bLvCamStop").disabled = false;
     $("bLvCal").disabled = false;
-    $("bLvAuto").disabled = false;
-    $("lvStatus").textContent = "Statut : Caméra active. Alignez la cible C50 puis appuyez sur « Caler la cible ».";
-    speakText("Caméra activée. Veuillez caler la cible.");
+    $("bLvAuto").disabled = true;            // il faut d'abord caler la cible
+    lvStatus("Caméra active. Cadre tout le visuel noir et ses cordons, puis appuie sur « Caler la cible ».");
+    speakText("Caméra activée. Cale la cible.");
   } catch(err){
-    $("lvStatus").textContent = "Erreur caméra : " + err.message;
+    lvStatus("Erreur caméra : " + err.message);
   }
 }
 
+function lvPause(){
+  if (lvTimer) clearTimeout(lvTimer);
+  lvTimer = null; lvWatching = false; lvPending = null;
+  $("bLvAuto").textContent = "Démarrer la surveillance";
+}
 function stopLvCam(){
-  if (lvWatchTimer) clearInterval(lvWatchTimer);
-  lvWatching = false;
+  lvPause();
   if (lvStream){ lvStream.getTracks().forEach(t => t.stop()); lvStream = null; }
   $("lvVideo").style.display = "none";
   $("lvPlaceholder").style.display = "block";
@@ -1872,86 +1891,127 @@ function stopLvCam(){
   $("bLvCamStop").disabled = true;
   $("bLvCal").disabled = true;
   $("bLvAuto").disabled = true;
-  $("bLvAuto").textContent = "Démarrer la surveillance";
-  $("lvStatus").textContent = "Statut : Caméra arrêtée.";
+  lvStatus("Caméra arrêtée." + lvBilan()); lvRef = false;
   speakText("Caméra arrêtée.");
 }
 
+// image courante de la caméra, dans une zone de dessin comme une photo importée (setImage attend un canvas)
+function lvGrab(){
+  const v = $("lvVideo"); if (!lvStream || !v.videoWidth || !v.videoHeight) return null;
+  const s = Math.min(1, 2600/Math.max(v.videoWidth, v.videoHeight));
+  const c = document.createElement("canvas"); c.width = Math.round(v.videoWidth*s); c.height = Math.round(v.videoHeight*s);
+  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height); return c;
+}
+// heure d'horloge vue par le tireur, en mm (y vers le haut) ; près du centre, la direction ne veut rien dire
 function convertClockDirection(x, y){
-  const angle = Math.atan2(x, y) * (180 / Math.PI);
-  let deg = (angle + 360) % 360;
-  let hour = Math.round(deg / 30);
-  if (hour === 0) hour = 12;
-  return hour;
+  let hour = Math.round(((Math.atan2(x, y) * 180 / Math.PI + 360) % 360) / 30) % 12;
+  return hour === 0 ? 12 : hour;
+}
+function lvPhrase(p){
+  const sc = scoreShot(p, calMm()), r = Math.hypot(p.x, p.y);
+  const pts = `${sc.near < 0.4 ? "environ " : ""}${sc.pts} point${sc.pts > 1 ? "s" : ""}${sc.x ? ", mouche" : ""}`;
+  if (r < 5) return `${pts}, au centre`;
+  const h = convertClockDirection(p.x, p.y);
+  return `${pts}, à ${h} heure${h > 1 ? "s" : ""}`;
+}
+function lvBilan(){
+  if (!lvRef || state.sample) return "";      // bilan seulement si une cible a été calée en mode direct
+  const sh = currentShots(), st = computeStats(sh, calMm(), +$("fDist").value || 25);
+  return ` Bilan : ${sh.length} impact${sh.length > 1 ? "s" : ""}, ${st.total} points.`;
+}
+// Plus exigeant que pour une photo : les trois cordons (9, 8 et bord du visuel) doivent être retrouvés. Sur l'image de
+// test d'une caméra sans cible, le calage ordinaire « réussissait » sans aucun cordon et donnait 26 faux impacts.
+function lvCalOk(){ const r = (state.calInfo || []).map(m => m.R); return !!getCal() && !state.calSuspect && [50, 75, 100].every(R => r.includes(R)); }
+// copie de l'état de l'onglet Analyse, pour revenir en arrière quand une image n'apporte pas de trou confirmé
+function lvSnap(){ return Object.assign({}, state, {view: {...state.view}}); }
+function lvRestore(snap){
+  Object.keys(state).forEach(k => { if (!(k in snap)) delete state[k]; }); Object.assign(state, snap);
+  $("badge").hidden = !state.sample && !state.curSeries; $("badge").textContent = `Série ${(state.curSeries||0)+1}`; refresh();
 }
 
-function processLvFrame(){
-  if (!lvStream) return;
-  const video = $("lvVideo");
-  const canvas = $("lvCanvas");
-  if (!video.videoWidth || !video.videoHeight) return;
-
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-  const img = new Image();
-  img.onload = () => {
-    setImage(img, false);
-    const result = detectHoles(true);
-    if (result && result.shots){
-      const newShotsCount = result.shots.length;
-      if (newShotsCount > lvKnownShotsCount){
-        const lastShot = result.shots[result.shots.length - 1];
-        const [x, y] = lastShot;
-        const pts = scoreOfShot(x, y, calMm());
-        const hour = convertClockDirection(x, y);
-        const text = `Impact détecté ! ${pts} points à ${hour} heure${hour>1?"s":""}.`;
-        $("lvStatus").textContent = `Statut : ${text} (Total série : ${newShotsCount} tir${newShotsCount>1?"s":""})`;
-        speakText(text);
-        lvKnownShotsCount = newShotsCount;
+function lvFrame(canvas){
+  if (!canvas) return null;
+  const before = lvSnap(), fs = $("fShots").value;
+  if (!prepareNextSeries()) return null;
+  const serie = state.curSeries;
+  $("fShots").value = "1";
+  try { setImage(canvas, false, true); } finally { $("fShots").value = fs; }
+  lvTouched = true;
+  const cal = getCal();
+  if (!lvCalOk()){
+    lvRestore(before); lvPending = null;
+    if (++lvFails >= 3) lvStatus("Cible mal vue sur la caméra (flou, reflet ou cadrage) : vérifie que tout le visuel noir est dans l'image.");
+    return null;
+  }
+  lvFails = 0;
+  state.holes = state.holes.filter(h => !((h.s||0) === serie && h.est));
+  const nouv = state.holes.filter(h => (h.s||0) === serie).map(h => imgToMm(cal, h.x, h.y));
+  if (!nouv.length){ lvRestore(before); lvPending = null; return null; }
+  const confirme = lvPending && nouv.length === lvPending.length &&
+    nouv.every(p => lvPending.some(q => Math.hypot(p.x-q.x, p.y-q.y) <= LV_MATCH_MM));
+  if (!confirme){ lvPending = nouv; lvRestore(before); return null; }
+  lvPending = null;
+  return nouv;
+}
+function lvTick(){
+  if (!lvWatching) return;
+  if (!lvBusy){
+    lvBusy = true;
+    try {
+      const nouv = lvFrame(lvGrab());
+      if (nouv){
+        const txt = nouv.map(lvPhrase).join(". ");
+        lvStatus(`Impact${nouv.length > 1 ? "s" : ""} : ${txt}.${lvBilan()}`);
+        speakText(`${nouv.length > 1 ? nouv.length + " impacts. " : ""}${txt}.`);
       }
-    }
-  };
-  img.src = canvas.toDataURL("image/jpeg", 0.85);
+    } catch(e){ lvStatus("Erreur pendant l'analyse : " + e.message); }
+    lvBusy = false;
+  }
+  lvTimer = setTimeout(lvTick, LV_PERIOD);
 }
 
 $("bLvCal").onclick = () => {
-  if (!lvStream) return;
-  processLvFrame();
-  bAutoCal.click();
-  lvKnownShotsCount = (state.shots || []).length;
-  $("lvStatus").textContent = "Statut : Cible calée. Prêt pour la surveillance.";
+  const c = lvGrab(); if (!c){ lvStatus("La caméra n'a pas encore d'image : réessaie dans une seconde."); return; }
+  if (!state.sample && state.holes.length && !confirm("Le mode direct remplace la photo et les impacts de l'onglet Analyse. Continuer ?")) return;
+  lvPause(); lvFails = 0;
+  const avant = lvSnap();
+  setImage(c, false); lvTouched = true;
+  if (!lvCalOk()){
+    lvRestore(avant);                        // calage refusé : l'onglet Analyse retrouve sa photo
+    $("bLvAuto").disabled = true;
+    lvStatus("Cible non calée : cadre tout le visuel noir et ses cordons, au plus faible grossissement, puis recommence.");
+    speakText("Cible non calée.");
+    return;
+  }
+  const n = state.holes.length;
+  lvRef = true; $("bLvAuto").disabled = false;
+  lvStatus(`Cible calée${n ? `, ${n} impact${n > 1 ? "s" : ""} déjà présent${n > 1 ? "s" : ""}` : ""}. Prêt pour la surveillance.`);
   speakText("Cible calée. Prêt pour la surveillance.");
 };
 
 $("bLvAuto").onclick = () => {
   if (lvWatching){
-    clearInterval(lvWatchTimer);
-    lvWatching = false;
-    $("bLvAuto").textContent = "Démarrer la surveillance";
-    $("lvStatus").textContent = "Statut : Surveillance en pause.";
+    lvPause();
+    lvStatus("Surveillance en pause." + lvBilan());
     speakText("Surveillance en pause.");
   } else {
-    lvWatching = true;
-    lvKnownShotsCount = (state.shots || []).length;
+    lvWatching = true; lvPending = null;
     $("bLvAuto").textContent = "Mettre en pause";
-    $("lvStatus").textContent = "Statut : Surveillance automatique active...";
+    lvStatus("Surveillance automatique active…");
     speakText("Surveillance automatique activée.");
-    lvWatchTimer = setInterval(processLvFrame, 3000);
+    lvTimer = setTimeout(lvTick, LV_PERIOD);
   }
 };
 
 $("bLvCamStart").onclick = startLvCam;
 $("bLvCamStop").onclick = stopLvCam;
-  loadSettings();
+loadSettings();
 $("fDate").value = today();
 $("hMetric").value = ls.get("c50_hmetric", "sdr");
 let lastW = 0;
 new ResizeObserver(() => { if ($("view-an").hidden) return; const w = Math.round(stage.getBoundingClientRect().width); resize(); if (state.img && w !== lastW){ lastW = w; fit(); } }).observe(stage);
 setImage(makeSample(), true);
-window.__c50 = {state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries, refineCalib, mmToImg, toScreen};
+window.__c50 = {lvFrame: c => lvFrame(c), state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries, refineCalib, mmToImg, toScreen};
 renderHistory();
 initStore();
 })();
