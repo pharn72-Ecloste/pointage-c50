@@ -20,7 +20,7 @@ Son matériel et ses habitudes :
   sur le porte-cible, avec le vide du pas de tir derrière.
 - Téléphone Android et PC Windows 10. L'appli est installée depuis Chrome.
 
-## Ce que fait l'application (version 22)
+## Ce que fait l'application (version 23)
 
 - Calage automatique de la cible, avec correction de perspective, et poignées de réglage manuel.
 - Détection des impacts, correction à la main : ajouter, supprimer, déplacer, annuler.
@@ -69,6 +69,13 @@ Son matériel et ses habitudes :
   trous d'ombre sont à 1,3–2 × le seuil et 1,9–4,9 d'allongement, les 13 vrais trous du clair à 3,3 × au moins et
   1,6 au plus. Résultat : 5 → 3 impacts en trop sur le 23/10 (série 5 : 48 points comme l'utilisateur, au lieu de 52),
   aucun changement sur les autres séances.
+- Choix de l'objectif en mode Longue-Vue (v23) : sur le Samsung S10 de l'utilisateur, l'image vidéo à travers
+  l'oculaire était minuscule alors que l'appareil photo Samsung marchait bien. facingMode « environment » laisse le
+  navigateur choisir parmi les trois caméras arrière. L'appli liste désormais les caméras, ouvre par défaut la
+  principale (« camera2 0, facing back » sous Chrome Android, non vérifié sur ce téléphone), propose un menu
+  « Objectif » et, si la caméra le permet, un curseur de zoom ; choix et zoom sont gardés dans c50_lvcam. Résolution
+  demandée : 3840×2160 (le navigateur donne ce qu'il peut). Changer d'objectif ou de zoom impose de recaler la cible.
+  Testé avec une caméra simulée à quatre objectifs, pas sur le téléphone.
 - Rotation entre photos (v22). Mesure de référence hors de l'appli : corrélation angulaire, sur 360°, de chacun des trois
   anneaux de chiffres (9, 8, 7) entre la photo k et la photo 1 ; les trois concordent à 0,05° près sur 11 paires de photos.
   Sur le 23/10, la v21 (centre des pixels blancs des quatre « 9 ») donnait 1,44 / 0,77 / 0,73 / −0,11 / 0,70° pour

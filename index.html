@@ -315,6 +315,10 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
       <button class="btn primary" id="bLvAuto" disabled>Démarrer la surveillance</button>
       <button class="btn ghost" id="bLvVoice">🔊 Voix : Active</button>
     </div>
+    <div class="row" id="lvCamRow" style="gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center" hidden>
+      <div class="field" style="min-width:200px"><label for="lvCamSel">Objectif</label><select id="lvCamSel"></select></div>
+      <div class="field" id="lvZoomBox" style="min-width:200px;flex:1" hidden><label for="lvZoom">Zoom <span id="lvZoomVal"></span></label><input id="lvZoom" type="range"></div>
+    </div>
 
     <div style="position:relative;background:#000;border-radius:12px;overflow:hidden;min-height:240px;display:flex;align-items:center;justify-content:center">
       <video id="lvVideo" autoplay playsinline muted style="width:100%;max-height:60vh;object-fit:contain;display:none"></video>
@@ -1525,7 +1529,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v22");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v23");
     renderHistory();
   }
 }
@@ -1916,17 +1920,77 @@ $("bLvVoice").onclick = () => {
   speakText(lvVoiceEnabled ? "Voix activée" : "");
 };
 
+// Choix de l'objectif. facingMode « environment » laisse le navigateur choisir parmi les caméras arrière : sur un
+// téléphone à 3 objectifs (Samsung S10), l'image à travers l'oculaire était minuscule, signe d'un ultra grand-angle.
+// On liste les caméras arrière et l'on prend par défaut la principale (sur Android, Chrome la nomme « camera2 0,
+// facing back » ; non vérifié sur chaque modèle, d'où le menu). Le choix et le zoom sont gardés dans c50_lvcam.
+const LV_RES = { width: {ideal: 3840}, height: {ideal: 2160} };
+function lvCamPrefs(){ return ls.get("c50_lvcam", {}) || {}; }
+function lvIsBack(d){ return /back|rear|arri[eè]re|environment/i.test(d.label); }
+function lvMainBack(cams){
+  const back = cams.filter(lvIsBack), pool = back.length ? back : cams;
+  return pool.find(d => /camera2 0\b/i.test(d.label)) || pool[0];
+}
+function lvCamName(d, i){ return d.label ? d.label.replace(/camera2 (\d+), facing back/i, "Arrière $1").replace(/camera2 (\d+), facing front/i, "Avant $1") : `Caméra ${i+1}`; }
+async function lvOpen(deviceId){
+  const video = deviceId ? { deviceId: {exact: deviceId}, ...LV_RES } : { facingMode: "environment", ...LV_RES };
+  if (lvStream){ lvStream.getTracks().forEach(t => t.stop()); lvStream = null; }
+  lvStream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+  $("lvVideo").srcObject = lvStream;
+  return lvStream.getVideoTracks()[0];
+}
+function lvSetupZoom(track){
+  const caps = track && track.getCapabilities ? track.getCapabilities() : {}, z = caps.zoom, box = $("lvZoomBox");
+  if (!z || !(z.max > z.min)){ box.hidden = true; return; }
+  const el = $("lvZoom"), cur = (track.getSettings().zoom) || z.min, saved = lvCamPrefs().zoom;
+  el.min = z.min; el.max = z.max; el.step = z.step || 0.1; el.value = saved != null ? Math.min(z.max, Math.max(z.min, saved)) : cur;
+  const apply = () => { $("lvZoomVal").textContent = "× " + (+el.value).toFixed(1);
+    track.applyConstraints({ advanced: [{ zoom: +el.value }] }).catch(() => {}); };
+  el.oninput = apply;
+  el.onchange = () => { ls.set("c50_lvcam", {...lvCamPrefs(), zoom: +el.value}); lvRecaler(); };
+  apply(); box.hidden = false;
+}
+function lvInfo(track){
+  const st = track.getSettings ? track.getSettings() : {}, sel = $("lvCamSel"), o = sel.options[sel.selectedIndex];
+  return `${o ? o.textContent : "caméra"}, ${st.width || "?"}×${st.height || "?"}`;
+}
+// changer d'objectif ou de zoom change l'image : l'ancienne référence ne vaut plus
+function lvRecaler(){
+  if (!lvRef && !lvWatching) return;
+  lvPause(); lvRef = false; $("bLvAuto").disabled = true;
+  lvStatus("Objectif ou zoom changé : recale la cible avant de surveiller.");
+}
+
 async function startLvCam(){
   try {
-    lvStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: {ideal: 1920}, height: {ideal: 1080} }, audio: false });
-    $("lvVideo").srcObject = lvStream;
+    const prefs = lvCamPrefs();
+    let track;
+    try { track = await lvOpen(prefs.deviceId); }                    // objectif retenu la dernière fois
+    catch(e){ if (!prefs.deviceId) throw e; track = await lvOpen(null); }
+    // les noms des caméras ne sont lisibles qu'après l'autorisation : on choisit ensuite la principale
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+    const curId = track.getSettings ? track.getSettings().deviceId : null;
+    if (!prefs.deviceId && cams.length > 1){
+      const main = lvMainBack(cams);
+      if (main && main.deviceId && main.deviceId !== curId) track = await lvOpen(main.deviceId);
+    }
+    const nowId = track.getSettings ? track.getSettings().deviceId : null;
+    const sel = $("lvCamSel");
+    sel.innerHTML = cams.map((d, i) => `<option value="${esc(d.deviceId)}"${d.deviceId === nowId ? " selected" : ""}>${esc(lvCamName(d, i))}</option>`).join("");
+    sel.onchange = async () => {
+      try { const t = await lvOpen(sel.value); ls.set("c50_lvcam", {deviceId: sel.value}); lvSetupZoom(t); lvRecaler();
+        lvStatus("Objectif : " + lvInfo(t) + ". Recale la cible avant de surveiller."); }
+      catch(err){ lvStatus("Objectif indisponible : " + err.message); }
+    };
+    $("lvCamRow").hidden = cams.length < 2 && !(track.getCapabilities && track.getCapabilities().zoom);
+    lvSetupZoom(track);
     $("lvVideo").style.display = "block";
     $("lvPlaceholder").style.display = "none";
     $("bLvCamStart").disabled = true;
     $("bLvCamStop").disabled = false;
     $("bLvCal").disabled = false;
     $("bLvAuto").disabled = true;            // il faut d'abord caler la cible
-    lvStatus("Caméra active. Cadre tout le visuel noir et ses cordons, puis appuie sur « Caler la cible ».");
+    lvStatus(`Caméra active (${lvInfo(track)}). Choisis l'objectif qui donne la plus grande image, cadre tout le visuel noir et ses cordons, puis appuie sur « Caler la cible ».`);
     speakText("Caméra activée. Cale la cible.");
   } catch(err){
     lvStatus("Erreur caméra : " + err.message);
@@ -1941,6 +2005,7 @@ function lvPause(){
 function stopLvCam(){
   lvPause();
   if (lvStream){ lvStream.getTracks().forEach(t => t.stop()); lvStream = null; }
+  $("lvCamRow").hidden = true;
   $("lvVideo").style.display = "none";
   $("lvPlaceholder").style.display = "block";
   $("bLvCamStart").disabled = false;
