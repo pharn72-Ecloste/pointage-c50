@@ -20,7 +20,7 @@ Son matériel et ses habitudes :
   sur le porte-cible, avec le vide du pas de tir derrière.
 - Téléphone Android et PC Windows 10. L'appli est installée depuis Chrome.
 
-## Ce que fait l'application (version 24)
+## Ce que fait l'application (version 25)
 
 - Calage automatique de la cible, avec correction de perspective, et poignées de réglage manuel.
 - Détection des impacts, correction à la main : ajouter, supprimer, déplacer, annuler.
@@ -88,6 +88,16 @@ Son matériel et ses habitudes :
   trous vus au calage ne servent plus que de référence (bilan et séance ne comptent que les coups tirés ensuite),
   noms « camera N » reconnus. Testé sur une longue-vue simulée avec les photos du 23/10 : série 2 annoncée en
   5 coups, 48 points comme l'utilisateur.
+- Images enregistrées à l'oculaire le 28/10 (S21, SV28, cible à 10 noir, fond sombre) et v25. Image entière : oculaire
+  repéré, trois cordons, calage juste (cordons calculés posés sur les cordons imprimés), environ 4 px/mm. Images trop
+  zoomées (visuel coupé) : calage refusé, comme voulu. Détection : aucun des vrais trous vu (taches à peine plus
+  sombres que le visuel), 49 faux trous au calage (bord de l'oculaire côté croissant d'ombre, chiffres blancs).
+  Tremblements simulés (6 à 15 px, < 1°) : 9 faux impacts annoncés en 6 images. v25 : (1) le bord réel du champ est
+  relevé à chaque image sur 180 rayons, en partant de 1,08 × le rayon vers l'intérieur (premier pixel clair, médiane
+  de 7 rayons, marge de 4 % du rayon) et tout ce qui est au-delà est repeint couleur papier ; (2) un trou n'est annoncé
+  qu'après trois images de suite au même endroit (4 mm). Sur 45 images bougées : 0 faux impact annoncé ; 16 faux trous
+  au calage (chiffres, liseré), qui ne comptent pas. Reste à faire : rendre les vrais trous visibles (adaptateur de
+  digiscopie, fond clair) ; si besoin, détection par différence entre images, à évaluer sur une paire avant/après tir.
 - Rotation entre photos (v22). Mesure de référence hors de l'appli : corrélation angulaire, sur 360°, de chacun des trois
   anneaux de chiffres (9, 8, 7) entre la photo k et la photo 1 ; les trois concordent à 0,05° près sur 11 paires de photos.
   Sur le 23/10, la v21 (centre des pixels blancs des quatre « 9 ») donnait 1,44 / 0,77 / 0,73 / −0,11 / 0,70° pour

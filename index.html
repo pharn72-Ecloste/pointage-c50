@@ -1530,7 +1530,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v24");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v25");
     renderHistory();
   }
 }
@@ -1881,7 +1881,7 @@ $("bImpOk").onclick = async () => {
 // ---------- onglets ----------
 // état du mode longue-vue (déclaré ici : showTab peut être appelé au chargement)
 let lvStream = null, lvVoiceEnabled = true, lvWatching = false, lvTimer = null, lvBusy = false, lvPending = null, lvFails = 0, lvRef = false, lvCircle = null;
-const LV_PERIOD = 3000, LV_MATCH_MM = 4;
+const LV_PERIOD = 3000, LV_MATCH_MM = 4, LV_CONFIRM = 3;   // un trou n'est annoncé qu'après 3 images de suite
 let lvTouched = false;      // le mode direct a changé la photo pendant que l'onglet Analyse était caché : recadrer au retour
 function showTab(t){
   ["an","hi","lv"].forEach(k => { $("tab-"+k).setAttribute("aria-selected", t===k); $("view-"+k).hidden = t!==k; });
@@ -1896,7 +1896,7 @@ if (location.hash === "#historique") showTab("hi");
 // ---------- mode longue-vue / direct ----------
 // Le téléphone filme la cible à travers la longue-vue. « Caler la cible » prend l'image de référence et la cale comme
 // une photo ; ensuite, toutes les 3 s, l'image de la caméra passe par le mode séries : on recale sur la référence et on
-// ne garde que les trous nouveaux. Un trou n'est annoncé qu'après l'avoir vu sur deux images de suite au même endroit
+// ne garde que les trous nouveaux. Un trou n'est annoncé qu'après l'avoir vu sur trois images de suite au même endroit
 // (à 4 mm près) : un reflet ou un flou d'une seule image ne déclenche rien. Sans trou nouveau, l'état est remis tel
 // qu'avant l'image : la référence ne bouge pas. Chaque coup annoncé devient une série ; à la fin, la séance est dans
 // l'onglet Analyse, à vérifier et enregistrer. Pendant l'analyse d'une image, le nombre de coups annoncé vaut 1 : au
@@ -2024,7 +2024,9 @@ function lvRaw(maxSide){
   const c = document.createElement("canvas"); c.width = Math.round(v.videoWidth*s); c.height = Math.round(v.videoHeight*s);
   c.getContext("2d").drawImage(v, 0, 0, c.width, c.height); return c;
 }
-function lvGrab(){ return lvCrop(lvRaw(2600), lvCircle); }
+// Le cercle de l'oculaire est cherché à chaque image (le téléphone bouge) ; si une image ne le montre pas, on garde
+// celui du calage. Sans oculaire au calage (cible filmée directement), aucune image n'est recadrée.
+function lvGrab(){ const raw = lvRaw(2600); if (!raw || !lvCircle) return raw; return lvCrop(raw, lvFindOculaire(raw) || lvCircle); }
 // À travers une longue-vue, l'image est un disque clair (le champ de l'oculaire) dans un grand cadre noir. Ce cadre est
 // plus sombre que le visuel, qui paraît gris : le calage le prenait pour le visuel et échouait (essai du 27/10, S21).
 // On repère le disque une fois, au calage, et chaque image est recadrée dessus, le noir autour repeint couleur papier.
@@ -2046,14 +2048,27 @@ function lvFindOculaire(c){
   const vals = []; for (let i=0;i<N;i++){ const x = i%w, y = (i/w)|0; if ((x-cx)**2 + (y-cy)**2 < (0.95*R)**2) vals.push(i); }
   vals.sort((a,b) => L[a]-L[b]); const top = vals.slice(Math.floor(0.85*vals.length));
   let r=0, gg=0, b=0; for (const i of top){ r += d[4*i]; gg += d[4*i+1]; b += d[4*i+2]; }
-  return {cx: cx/k, cy: cy/k, R: R/k, paper: `rgb(${Math.round(r/top.length)},${Math.round(gg/top.length)},${Math.round(b/top.length)})`, w: c.width, h: c.height};
+  // Bord réel du champ, rayon par rayon : en partant de l'extérieur, premier pixel clair. Le champ n'est pas un disque
+  // parfait (croissant d'ombre quand le téléphone est décentré) : sur l'image du 28/10, une quarantaine de faux trous
+  // longeaient ce croissant. On garde la médiane de 7 rayons voisins, puis on retire une marge de 4 % du rayon. La recherche part de 1,08 × le rayon : plus loin, une
+  // zone claire hors du champ (feuillage, ciel) serait prise pour le bord.
+  const NA = 180, raw = new Float32Array(NA);
+  for (let a=0; a<NA; a++){ const ca = Math.cos(2*Math.PI*a/NA), sa = Math.sin(2*Math.PI*a/NA); raw[a] = 0.5*R;
+    for (let rr = 1.08*R; rr > 0.5*R; rr -= 0.5){ const x = Math.round(cx + rr*ca), y = Math.round(cy + rr*sa);
+      if (x < 0 || y < 0 || x >= w || y >= h) continue; if (L[y*w + x] > T){ raw[a] = rr; break; } } }
+  const edge = []; for (let a=0; a<NA; a++){ const v = []; for (let j=-3; j<=3; j++) v.push(raw[(a+j+NA)%NA]); v.sort((p,q) => p-q); edge.push((v[3] - 0.04*R)/k); }
+  return {cx: cx/k, cy: cy/k, R: R/k, edge, paper: `rgb(${Math.round(r/top.length)},${Math.round(gg/top.length)},${Math.round(b/top.length)})`, w: c.width, h: c.height};
 }
 function lvCrop(c, o){
   if (!c || !o) return c;
   const f = c.width/o.w, cx = o.cx*f, cy = o.cy*f, R = o.R*f, side = Math.round(2.2*R);
   const out = document.createElement("canvas"); out.width = side; out.height = side; const g = out.getContext("2d");
   g.fillStyle = o.paper; g.fillRect(0, 0, side, side);
-  g.save(); g.beginPath(); g.arc(side/2, side/2, 0.97*R, 0, 2*Math.PI); g.clip();
+  g.save(); g.beginPath();
+  if (o.edge){ const NA = o.edge.length; for (let a=0; a<NA; a++){ const t = 2*Math.PI*a/NA, rr = Math.min(0.97*R, o.edge[a]*f);
+      const x = side/2 + rr*Math.cos(t), y = side/2 + rr*Math.sin(t); a ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); }
+  else g.arc(side/2, side/2, 0.97*R, 0, 2*Math.PI);
+  g.clip();
   g.drawImage(c, cx - side/2, cy - side/2, side, side, 0, 0, side, side); g.restore();
   return out;
 }
@@ -2102,9 +2117,12 @@ function lvFrame(canvas){
   state.holes = state.holes.filter(h => !((h.s||0) === serie && h.est));
   const nouv = state.holes.filter(h => (h.s||0) === serie).map(h => imgToMm(cal, h.x, h.y));
   if (!nouv.length){ lvRestore(before); lvPending = null; return null; }
-  const confirme = lvPending && nouv.length === lvPending.length &&
-    nouv.every(p => lvPending.some(q => Math.hypot(p.x-q.x, p.y-q.y) <= LV_MATCH_MM));
-  if (!confirme){ lvPending = nouv; lvRestore(before); return null; }
+  // Même trou au même endroit (4 mm) sur LV_CONFIRM images de suite. À 2 images, un téléphone tenu à la main faisait
+  // annoncer des faux trous (essai du 28/10 : décalages de 6 à 15 px et < 1° simulés sur une image de l'utilisateur).
+  const pareil = lvPending && nouv.length === lvPending.pts.length &&
+    nouv.every(p => lvPending.pts.some(q => Math.hypot(p.x-q.x, p.y-q.y) <= LV_MATCH_MM));
+  lvPending = pareil ? {pts: nouv, n: lvPending.n + 1} : {pts: nouv, n: 1};
+  if (lvPending.n < LV_CONFIRM){ lvRestore(before); return null; }
   lvPending = null;
   return nouv;
 }
