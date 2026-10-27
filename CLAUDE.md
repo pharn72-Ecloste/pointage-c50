@@ -43,8 +43,8 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v23` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v23`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v24` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v24`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,
@@ -153,7 +153,11 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
   vus une série trop tard). Un critère de teinte essayé seul a fait pire (26 sur 30) : à régler sur plusieurs séances.
 - La détection reste sensible à de petits écarts de calage : un décalage de quelques dixièmes de mm
   suffit à faire apparaître un fragment de chiffre ou à changer le découpage d'une déchirure.
-- Mode Longue-Vue : jamais testé à travers une longue-vue, seulement en rejouant des photos. Un reflet ou un décalage
+- Mode Longue-Vue : un seul essai réel (27/10, Samsung S21, longue-vue SV28, cible à 10 noir) : calage refusé, le
+  cordon du 9 n'est pas retrouvé sur une image floue à environ 2 px/mm. Depuis la v24, le cercle de l'oculaire est
+  repéré et le noir autour repeint couleur papier (sans quoi le calage prenait le cadre noir pour le visuel), et le
+  bouton « Enregistrer l'image » sauve l'image réelle de la caméra pour régler le calage. Validé seulement en rejouant
+  des photos. Un reflet ou un décalage
   qui se répète sur deux images peut être annoncé comme impact ; une balle passée dans un trou existant ne l'est pas.
 - Ombre portée sur la zone claire (carton courbé en haut) : depuis la v21, un morceau de cordon épaissi par l'ombre,
   allongé et au contour mou, est rejeté (3 faux trous de moins le 23/10). Une ombre plus nette ou un vrai trou très

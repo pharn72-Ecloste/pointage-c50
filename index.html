@@ -314,6 +314,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
       <button class="btn" id="bLvCal" disabled>Caler la cible</button>
       <button class="btn primary" id="bLvAuto" disabled>Démarrer la surveillance</button>
       <button class="btn ghost" id="bLvVoice">🔊 Voix : Active</button>
+      <button class="btn ghost" id="bLvSave" disabled>Enregistrer l'image</button>
     </div>
     <div class="row" id="lvCamRow" style="gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center" hidden>
       <div class="field" style="min-width:200px"><label for="lvCamSel">Objectif</label><select id="lvCamSel"></select></div>
@@ -1529,7 +1530,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v23");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v24");
     renderHistory();
   }
 }
@@ -1879,7 +1880,7 @@ $("bImpOk").onclick = async () => {
 
 // ---------- onglets ----------
 // état du mode longue-vue (déclaré ici : showTab peut être appelé au chargement)
-let lvStream = null, lvVoiceEnabled = true, lvWatching = false, lvTimer = null, lvBusy = false, lvPending = null, lvFails = 0, lvRef = false;
+let lvStream = null, lvVoiceEnabled = true, lvWatching = false, lvTimer = null, lvBusy = false, lvPending = null, lvFails = 0, lvRef = false, lvCircle = null;
 const LV_PERIOD = 3000, LV_MATCH_MM = 4;
 let lvTouched = false;      // le mode direct a changé la photo pendant que l'onglet Analyse était caché : recadrer au retour
 function showTab(t){
@@ -1921,17 +1922,17 @@ $("bLvVoice").onclick = () => {
 };
 
 // Choix de l'objectif. facingMode « environment » laisse le navigateur choisir parmi les caméras arrière : sur un
-// téléphone à 3 objectifs (Samsung S10), l'image à travers l'oculaire était minuscule, signe d'un ultra grand-angle.
+// téléphone à 3 objectifs (Samsung S21), l'image à travers l'oculaire était minuscule, signe d'un ultra grand-angle.
 // On liste les caméras arrière et l'on prend par défaut la principale (sur Android, Chrome la nomme « camera2 0,
-// facing back » ; non vérifié sur chaque modèle, d'où le menu). Le choix et le zoom sont gardés dans c50_lvcam.
+// facing back », et « camera 0, facing back » sur le Samsung S21 de l'utilisateur ; d'où aussi le menu). Le choix et le zoom sont gardés dans c50_lvcam.
 const LV_RES = { width: {ideal: 3840}, height: {ideal: 2160} };
 function lvCamPrefs(){ return ls.get("c50_lvcam", {}) || {}; }
 function lvIsBack(d){ return /back|rear|arri[eè]re|environment/i.test(d.label); }
 function lvMainBack(cams){
   const back = cams.filter(lvIsBack), pool = back.length ? back : cams;
-  return pool.find(d => /camera2 0\b/i.test(d.label)) || pool[0];
+  return pool.find(d => /camera2? 0\b/i.test(d.label)) || pool[0];
 }
-function lvCamName(d, i){ return d.label ? d.label.replace(/camera2 (\d+), facing back/i, "Arrière $1").replace(/camera2 (\d+), facing front/i, "Avant $1") : `Caméra ${i+1}`; }
+function lvCamName(d, i){ return d.label ? d.label.replace(/camera2? (\d+), facing back/i, "Arrière $1").replace(/camera2? (\d+), facing front/i, "Avant $1") : `Caméra ${i+1}`; }
 async function lvOpen(deviceId){
   const video = deviceId ? { deviceId: {exact: deviceId}, ...LV_RES } : { facingMode: "environment", ...LV_RES };
   if (lvStream){ lvStream.getTracks().forEach(t => t.stop()); lvStream = null; }
@@ -1988,7 +1989,7 @@ async function startLvCam(){
     $("lvPlaceholder").style.display = "none";
     $("bLvCamStart").disabled = true;
     $("bLvCamStop").disabled = false;
-    $("bLvCal").disabled = false;
+    $("bLvCal").disabled = false; $("bLvSave").disabled = false;
     $("bLvAuto").disabled = true;            // il faut d'abord caler la cible
     lvStatus(`Caméra active (${lvInfo(track)}). Choisis l'objectif qui donne la plus grande image, cadre tout le visuel noir et ses cordons, puis appuie sur « Caler la cible ».`);
     speakText("Caméra activée. Cale la cible.");
@@ -2010,18 +2011,51 @@ function stopLvCam(){
   $("lvPlaceholder").style.display = "block";
   $("bLvCamStart").disabled = false;
   $("bLvCamStop").disabled = true;
-  $("bLvCal").disabled = true;
+  $("bLvCal").disabled = true; $("bLvSave").disabled = true;
   $("bLvAuto").disabled = true;
   lvStatus("Caméra arrêtée." + lvBilan()); lvRef = false;
   speakText("Caméra arrêtée.");
 }
 
 // image courante de la caméra, dans une zone de dessin comme une photo importée (setImage attend un canvas)
-function lvGrab(){
+function lvRaw(maxSide){
   const v = $("lvVideo"); if (!lvStream || !v.videoWidth || !v.videoHeight) return null;
-  const s = Math.min(1, 2600/Math.max(v.videoWidth, v.videoHeight));
+  const s = Math.min(1, maxSide/Math.max(v.videoWidth, v.videoHeight));
   const c = document.createElement("canvas"); c.width = Math.round(v.videoWidth*s); c.height = Math.round(v.videoHeight*s);
   c.getContext("2d").drawImage(v, 0, 0, c.width, c.height); return c;
+}
+function lvGrab(){ return lvCrop(lvRaw(2600), lvCircle); }
+// À travers une longue-vue, l'image est un disque clair (le champ de l'oculaire) dans un grand cadre noir. Ce cadre est
+// plus sombre que le visuel, qui paraît gris : le calage le prenait pour le visuel et échouait (essai du 27/10, S21).
+// On repère le disque une fois, au calage, et chaque image est recadrée dessus, le noir autour repeint couleur papier.
+// Sans cadre noir (téléphone tenu devant la cible), l'image reste telle quelle.
+function lvFindOculaire(c){
+  const k = Math.min(1, 400/Math.max(c.width, c.height)), w = Math.max(1, Math.round(c.width*k)), h = Math.max(1, Math.round(c.height*k));
+  const t = document.createElement("canvas"); t.width = w; t.height = h; const g = t.getContext("2d", {willReadFrequently:true});
+  g.drawImage(c, 0, 0, w, h); const d = g.getImageData(0, 0, w, h).data, N = w*h, L = new Float32Array(N);
+  for (let i=0;i<N;i++) L[i] = (d[4*i] + d[4*i+1] + d[4*i+2])/3;
+  const srt = Float32Array.from(L).sort(), T = Math.max(30, 0.3*srt[Math.floor(0.95*(N-1))]);
+  let n=0, sx=0, sy=0, bord=0, bordN=0;
+  for (let i=0;i<N;i++){ const x = i%w, y = (i/w)|0, clair = L[i] > T;
+    if (clair){ n++; sx += x; sy += y; }
+    if (x===0 || y===0 || x===w-1 || y===h-1){ bordN++; if (!clair) bord++; } }
+  if (n < 0.05*N || n > 0.85*N || bord < 0.6*bordN) return null;        // pas de cadre noir : photo ordinaire
+  const cx = sx/n, cy = sy/n, R = Math.sqrt(n/Math.PI);
+  let dedans = 0; for (let i=0;i<N;i++){ const x = i%w, y = (i/w)|0; if (L[i] > T && (x-cx)**2 + (y-cy)**2 <= (1.05*R)**2) dedans++; }
+  if (dedans < 0.9*n) return null;                                          // la zone claire n'est pas un disque
+  const vals = []; for (let i=0;i<N;i++){ const x = i%w, y = (i/w)|0; if ((x-cx)**2 + (y-cy)**2 < (0.95*R)**2) vals.push(i); }
+  vals.sort((a,b) => L[a]-L[b]); const top = vals.slice(Math.floor(0.85*vals.length));
+  let r=0, gg=0, b=0; for (const i of top){ r += d[4*i]; gg += d[4*i+1]; b += d[4*i+2]; }
+  return {cx: cx/k, cy: cy/k, R: R/k, paper: `rgb(${Math.round(r/top.length)},${Math.round(gg/top.length)},${Math.round(b/top.length)})`, w: c.width, h: c.height};
+}
+function lvCrop(c, o){
+  if (!c || !o) return c;
+  const f = c.width/o.w, cx = o.cx*f, cy = o.cy*f, R = o.R*f, side = Math.round(2.2*R);
+  const out = document.createElement("canvas"); out.width = side; out.height = side; const g = out.getContext("2d");
+  g.fillStyle = o.paper; g.fillRect(0, 0, side, side);
+  g.save(); g.beginPath(); g.arc(side/2, side/2, 0.97*R, 0, 2*Math.PI); g.clip();
+  g.drawImage(c, cx - side/2, cy - side/2, side, side, 0, 0, side, side); g.restore();
+  return out;
 }
 // heure d'horloge vue par le tireur, en mm (y vers le haut) ; près du centre, la direction ne veut rien dire
 function convertClockDirection(x, y){
@@ -2092,7 +2126,8 @@ function lvTick(){
 }
 
 $("bLvCal").onclick = () => {
-  const c = lvGrab(); if (!c){ lvStatus("La caméra n'a pas encore d'image : réessaie dans une seconde."); return; }
+  const raw = lvRaw(2600); lvCircle = raw ? lvFindOculaire(raw) : null;
+  const c = lvCrop(raw, lvCircle); if (!c){ lvStatus("La caméra n'a pas encore d'image : réessaie dans une seconde."); return; }
   if (!state.sample && state.holes.length && !confirm("Le mode direct remplace la photo et les impacts de l'onglet Analyse. Continuer ?")) return;
   lvPause(); lvFails = 0;
   const avant = lvSnap();
@@ -2100,13 +2135,15 @@ $("bLvCal").onclick = () => {
   if (!lvCalOk()){
     lvRestore(avant);                        // calage refusé : l'onglet Analyse retrouve sa photo
     $("bLvAuto").disabled = true;
-    lvStatus("Cible non calée : cadre tout le visuel noir et ses cordons, au plus faible grossissement, puis recommence.");
+    lvStatus(`Cible non calée${lvCircle ? " (oculaire repéré)" : ""} : centre le téléphone sur l'oculaire, monte le zoom pour que le cercle remplisse l'écran, garde tout le visuel noir et ses cordons, puis recommence.`);
     speakText("Cible non calée.");
     return;
   }
-  const n = state.holes.length;
+  // Ce qui est vu au calage sert seulement de référence : les trous déjà là (et les faux trous d'une image floue)
+  // restent exclus des images suivantes, mais ne comptent ni dans le bilan ni dans la séance.
+  state.holes = []; refresh();
   lvRef = true; $("bLvAuto").disabled = false;
-  lvStatus(`Cible calée${n ? `, ${n} impact${n > 1 ? "s" : ""} déjà présent${n > 1 ? "s" : ""}` : ""}. Prêt pour la surveillance.`);
+  lvStatus(`Cible calée${lvCircle ? " (oculaire repéré)" : ""}. Prêt pour la surveillance : seuls les coups tirés à partir de maintenant compteront.`);
   speakText("Cible calée. Prêt pour la surveillance.");
 };
 
@@ -2124,6 +2161,16 @@ $("bLvAuto").onclick = () => {
   }
 };
 
+// image réelle de la caméra, en pleine résolution et sans recadrage, pour régler le calage sur ce que voit le téléphone
+// (une capture d'écran est moins détaillée). Un JPEG tiré d'une zone de dessin ne porte aucune métadonnée.
+$("bLvSave").onclick = () => {
+  const c = lvRaw(1e9); if (!c){ lvStatus("La caméra n'a pas encore d'image."); return; }
+  const d = new Date(), p2 = n => String(n).padStart(2, "0");
+  const name = `pointage-c50-oculaire-${today()}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}.jpg`;
+  c.toBlob(b => { if (!b) return; const url = URL.createObjectURL(b), a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+    lvStatus(`Image enregistrée (${c.width}×${c.height}) : ${name}, dans le dossier Téléchargements.`); }, "image/jpeg", 0.92);
+};
 $("bLvCamStart").onclick = startLvCam;
 $("bLvCamStop").onclick = stopLvCam;
 loadSettings();
@@ -2132,7 +2179,7 @@ $("hMetric").value = ls.get("c50_hmetric", "sdr");
 let lastW = 0;
 new ResizeObserver(() => { if ($("view-an").hidden) return; const w = Math.round(stage.getBoundingClientRect().width); resize(); if (state.img && w !== lastW){ lastW = w; fit(); } }).observe(stage);
 setImage(makeSample(), true);
-window.__c50 = {lvFrame: c => lvFrame(c), state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries, refineCalib, mmToImg, toScreen};
+window.__c50 = {lvFrame: c => lvFrame(c), lvFindOculaire, lvCrop, state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries, refineCalib, mmToImg, toScreen};
 renderHistory();
 initStore();
 })();
