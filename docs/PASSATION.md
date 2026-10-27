@@ -20,7 +20,7 @@ Son matériel et ses habitudes :
   sur le porte-cible, avec le vide du pas de tir derrière.
 - Téléphone Android et PC Windows 10. L'appli est installée depuis Chrome.
 
-## Ce que fait l'application (version 25)
+## Ce que fait l'application (version 26)
 
 - Calage automatique de la cible, avec correction de perspective, et poignées de réglage manuel.
 - Détection des impacts, correction à la main : ajouter, supprimer, déplacer, annuler.
@@ -98,6 +98,17 @@ Son matériel et ses habitudes :
   qu'après trois images de suite au même endroit (4 mm). Sur 45 images bougées : 0 faux impact annoncé ; 16 faux trous
   au calage (chiffres, liseré), qui ne comptent pas. Reste à faire : rendre les vrais trous visibles (adaptateur de
   digiscopie, fond clair) ; si besoin, détection par différence entre images, à évaluer sur une paire avant/après tir.
+- v26, référence glissante en mode Longue-Vue. Deux nouvelles images à l'oculaire (28/10, plus de lumière) : calage
+  juste sur les deux (trois cordons, ~3,6 px/mm), vrais trous toujours invisibles. Données l'une après l'autre, la
+  cible n'ayant pas changé : 1 et 5 fausses annonces, des chiffres imprimés qui changent d'aspect (échelle +3 %,
+  luminance du visuel +14 %, du papier +6 %). Corrections : (1) une image sans trou nouveau devient la référence de la
+  suivante ; tant qu'un trou attend sa confirmation, la référence ne bouge pas ; (2) mesures globales à chaque image
+  (échelle, luminance du visuel à 55–70 mm et du papier à 105–120 mm, hors des axes) : écart > 2 % d'échelle ou > 8 %
+  de lumière, l'image devient la référence sans annonce ; (3) marge d'exclusion autour de l'existant portée de 1 à
+  2 mm (state.exclCells, mode Longue-Vue seulement) ; (4) images suivantes acceptées avec le bord du visuel et un seul
+  cordon (le calage initial en exige toujours trois). Résultats : 0 fausse annonce sur la paire réelle et sur 45 images
+  bougées ; longue-vue simulée avec les photos des séries 2 et 3 du 23/10 (même lumière) : 4 impacts annoncés,
+  « 9 points » à 3, 9, 4 et 4 heures, les 4 coups séparés de la série 3 ; le 5e, dans la déchirure, n'est pas vu.
 - Rotation entre photos (v22). Mesure de référence hors de l'appli : corrélation angulaire, sur 360°, de chacun des trois
   anneaux de chiffres (9, 8, 7) entre la photo k et la photo 1 ; les trois concordent à 0,05° près sur 11 paires de photos.
   Sur le 23/10, la v21 (centre des pixels blancs des quatre « 9 ») donnait 1,44 / 0,77 / 0,73 / −0,11 / 0,70° pour

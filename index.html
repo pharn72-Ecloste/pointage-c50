@@ -790,7 +790,7 @@ function detectHoles(rawOnly){
   if (rawOnly) return [];
   const full = opened.slice();             // tous les trous de cette photo, anciens compris (copie : on efface ensuite)
   if (prevGrid){ // série suivante : on retire tout ce qui était déjà troué sur la photo précédente
-    const excl = morph(prevGrid, GRID_N, GRID_N, 2, false);
+    const excl = morph(prevGrid, GRID_N, GRID_N, state.exclCells || 2, false);   // 1 mm ; 2 mm en mode Longue-Vue (images floues)
     for (let i=0;i<N;i++) if (opened[i] && cellOf[i]>=0 && excl[cellOf[i]]) opened[i]=0;
     const k2 = Math.max(1, Math.round(0.6*pm));
     opened = morph(morph(opened, bw, bh, k2, true), bw, bh, k2, false);
@@ -1530,7 +1530,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v25");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v26");
     renderHistory();
   }
 }
@@ -1880,7 +1880,7 @@ $("bImpOk").onclick = async () => {
 
 // ---------- onglets ----------
 // état du mode longue-vue (déclaré ici : showTab peut être appelé au chargement)
-let lvStream = null, lvVoiceEnabled = true, lvWatching = false, lvTimer = null, lvBusy = false, lvPending = null, lvFails = 0, lvRef = false, lvCircle = null;
+let lvStream = null, lvVoiceEnabled = true, lvWatching = false, lvTimer = null, lvBusy = false, lvPending = null, lvFails = 0, lvRef = false, lvCircle = null, lvRefMes = null;
 const LV_PERIOD = 3000, LV_MATCH_MM = 4, LV_CONFIRM = 3;   // un trou n'est annoncé qu'après 3 images de suite
 let lvTouched = false;      // le mode direct a changé la photo pendant que l'onglet Analyse était caché : recadrer au retour
 function showTab(t){
@@ -2091,7 +2091,10 @@ function lvBilan(){
 }
 // Plus exigeant que pour une photo : les trois cordons (9, 8 et bord du visuel) doivent être retrouvés. Sur l'image de
 // test d'une caméra sans cible, le calage ordinaire « réussissait » sans aucun cordon et donnait 26 faux impacts.
-function lvCalOk(){ const r = (state.calInfo || []).map(m => m.R); return !!getCal() && !state.calSuspect && [50, 75, 100].every(R => r.includes(R)); }
+// Images suivantes (strict = false) : bord du visuel et un cordon suffisent ; l'échelle est de toute façon comparée à la
+// référence à 2 % près (lvEcart). Exiger les trois cordons faisait rejeter des images floues mais justes.
+function lvCalOk(strict = true){ const r = (state.calInfo || []).map(m => m.R); if (!getCal() || state.calSuspect) return false;
+  return strict ? [50, 75, 100].every(R => r.includes(R)) : r.includes(100) && (r.includes(50) || r.includes(75)); }
 // copie de l'état de l'onglet Analyse, pour revenir en arrière quand une image n'apporte pas de trou confirmé
 function lvSnap(){ return Object.assign({}, state, {view: {...state.view}}); }
 function lvRestore(snap){
@@ -2099,16 +2102,31 @@ function lvRestore(snap){
   $("badge").hidden = !state.sample && !state.curSeries; $("badge").textContent = `Série ${(state.curSeries||0)+1}`; refresh();
 }
 
+// Mesures globales d'une image calée : échelle, luminance du visuel (55–70 mm) et du papier (105–120 mm), relevées
+// hors des axes où sont les chiffres. Un coup ne les change pas (un trou couvre ~1 % de la couronne mesurée) ; un
+// changement de lumière ou de zoom, si : entre deux images réelles du 28/10, échelle +3 %, visuel +14 %, papier +6 %.
+function lvMesures(){
+  const cal = getCal(), img = state.img; if (!cal || !img) return null;
+  const d = img.getContext("2d", {willReadFrequently:true}).getImageData(0, 0, img.width, img.height).data;
+  const moy = (r0, r1) => { let sm = 0, n = 0;
+    for (let a=0; a<360; a+=3){ if (a%90 < 12 || a%90 > 78) continue;
+      for (let r=r0; r<=r1; r+=2.5){ const q = mmToImg(cal, r*Math.cos(a*Math.PI/180), r*Math.sin(a*Math.PI/180)), x = Math.round(q.x), y = Math.round(q.y);
+        if (x < 0 || y < 0 || x >= img.width || y >= img.height) continue; const i = 4*(y*img.width + x); sm += d[i] + d[i+1] + d[i+2]; n++; } }
+    return n ? sm/(3*n) : null; };
+  return {px: cal.pxmm, vis: moy(55, 70), pap: moy(105, 120)};
+}
+const lvEcart = (a, b) => !a || !b || Math.abs(a.px/b.px - 1) > 0.02 || Math.abs(a.vis/b.vis - 1) > 0.08 || Math.abs(a.pap/b.pap - 1) > 0.08;
 function lvFrame(canvas){
   if (!canvas) return null;
   const before = lvSnap(), fs = $("fShots").value;
   if (!prepareNextSeries()) return null;
   const serie = state.curSeries;
   $("fShots").value = "1";
-  try { setImage(canvas, false, true); } finally { $("fShots").value = fs; }
+  state.exclCells = 4;     // à travers l'oculaire, un léger décalage laissait dépasser le bord d'un chiffre imprimé
+  try { setImage(canvas, false, true); } finally { $("fShots").value = fs; delete state.exclCells; }
   lvTouched = true;
   const cal = getCal();
-  if (!lvCalOk()){
+  if (!lvCalOk(false)){
     lvRestore(before); lvPending = null;
     if (++lvFails >= 3) lvStatus("Cible mal vue sur la caméra (flou, reflet ou cadrage) : vérifie que tout le visuel noir est dans l'image.");
     return null;
@@ -2116,14 +2134,23 @@ function lvFrame(canvas){
   lvFails = 0;
   state.holes = state.holes.filter(h => !((h.s||0) === serie && h.est));
   const nouv = state.holes.filter(h => (h.s||0) === serie).map(h => imgToMm(cal, h.x, h.y));
-  if (!nouv.length){ lvRestore(before); lvPending = null; return null; }
+  // Référence glissante : une image sans trou nouveau devient la référence de la suivante (même trous, pas de série
+  // en plus). Entre deux images à 3 s d'intervalle, lumière et zoom changent peu ; un nuage ou un réglage de zoom est
+  // ainsi absorbé peu à peu au lieu de faire voir des chiffres imprimés comme des trous (images du 28/10 : 1 et 5
+  // fausses annonces quand on comparait à l'image du calage). Changement brusque d'échelle ou de lumière : l'image
+  // devient la nouvelle référence sans rien annoncer (un coup tiré à cet instant précis est alors perdu).
+  const mes = lvMesures();
+  const nouvelleRef = () => { state.holes = state.holes.filter(h => (h.s||0) !== serie); state.curSeries = before.curSeries;
+    $("badge").textContent = `Série ${(state.curSeries||0)+1}`; lvRefMes = mes; lvPending = null; refresh(); };
+  if (lvEcart(mes, lvRefMes)){ nouvelleRef(); if (nouv.length) lvStatus("Lumière ou cadrage changé : nouvelle image de référence, rien n'est annoncé."); return null; }
+  if (!nouv.length){ nouvelleRef(); return null; }
   // Même trou au même endroit (4 mm) sur LV_CONFIRM images de suite. À 2 images, un téléphone tenu à la main faisait
   // annoncer des faux trous (essai du 28/10 : décalages de 6 à 15 px et < 1° simulés sur une image de l'utilisateur).
   const pareil = lvPending && nouv.length === lvPending.pts.length &&
     nouv.every(p => lvPending.pts.some(q => Math.hypot(p.x-q.x, p.y-q.y) <= LV_MATCH_MM));
   lvPending = pareil ? {pts: nouv, n: lvPending.n + 1} : {pts: nouv, n: 1};
-  if (lvPending.n < LV_CONFIRM){ lvRestore(before); return null; }
-  lvPending = null;
+  if (lvPending.n < LV_CONFIRM){ lvRestore(before); return null; }   // la référence reste celle d'avant le trou
+  lvPending = null; lvRefMes = mes;
   return nouv;
 }
 function lvTick(){
@@ -2159,7 +2186,7 @@ $("bLvCal").onclick = () => {
   }
   // Ce qui est vu au calage sert seulement de référence : les trous déjà là (et les faux trous d'une image floue)
   // restent exclus des images suivantes, mais ne comptent ni dans le bilan ni dans la séance.
-  state.holes = []; refresh();
+  state.holes = []; refresh(); lvRefMes = lvMesures();
   lvRef = true; $("bLvAuto").disabled = false;
   lvStatus(`Cible calée${lvCircle ? " (oculaire repéré)" : ""}. Prêt pour la surveillance : seuls les coups tirés à partir de maintenant compteront.`);
   speakText("Cible calée. Prêt pour la surveillance.");
@@ -2197,7 +2224,7 @@ $("hMetric").value = ls.get("c50_hmetric", "sdr");
 let lastW = 0;
 new ResizeObserver(() => { if ($("view-an").hidden) return; const w = Math.round(stage.getBoundingClientRect().width); resize(); if (state.img && w !== lastW){ lastW = w; fit(); } }).observe(stage);
 setImage(makeSample(), true);
-window.__c50 = {lvFrame: c => lvFrame(c), lvFindOculaire, lvCrop, state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries, refineCalib, mmToImg, toScreen};
+window.__c50 = {lvFrame: c => lvFrame(c), lvSetRef: () => { lvRefMes = lvMesures(); }, lvFindOculaire, lvCrop, state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries, refineCalib, mmToImg, toScreen};
 renderHistory();
 initStore();
 })();

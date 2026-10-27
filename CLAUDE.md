@@ -43,8 +43,8 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v25` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v25`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v26` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v26`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,
@@ -159,8 +159,11 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
   bouton « Enregistrer l'image » sauve l'image réelle de la caméra pour régler le calage. Images enregistrées le 28/10 :
   calage juste quand le visuel est entier dans l'oculaire, mais les vrais trous (fond sombre, 25 m) restent invisibles
   à la détection. v25 : bord réel de l'oculaire retiré à chaque image, annonce après trois images identiques ; sur
-  45 images bougées tirées de celle du 28/10, plus aucune fausse annonce. Un artefact qui reste au même endroit sur
-  trois images peut encore être annoncé ; une balle passée dans un trou existant ne l'est pas.
+  45 images bougées tirées de celle du 28/10, plus aucune fausse annonce. v26 : chaque image est comparée à la
+  précédente (référence glissante) ; un changement brusque d'échelle (> 2 %) ou de lumière (> 8 %) fait de l'image la
+  nouvelle référence sans rien annoncer (un coup tiré à cet instant est perdu) ; marge d'exclusion de 2 mm autour de
+  l'existant. Deux images réelles du 28/10 (lumière et zoom différents) ne donnent plus de fausse annonce. Un artefact
+  qui reste au même endroit sur trois images peut encore être annoncé ; une balle passée dans un trou existant ne l'est pas.
 - Ombre portée sur la zone claire (carton courbé en haut) : depuis la v21, un morceau de cordon épaissi par l'ombre,
   allongé et au contour mou, est rejeté (3 faux trous de moins le 23/10). Une ombre plus nette ou un vrai trou très
   allongé dans le clair pourraient passer du mauvais côté de la règle : elle n'est réglée que sur 5 séances.
