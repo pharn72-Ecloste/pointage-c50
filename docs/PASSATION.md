@@ -20,7 +20,7 @@ Son matériel et ses habitudes :
   sur le porte-cible, avec le vide du pas de tir derrière.
 - Téléphone Android et PC Windows 10. L'appli est installée depuis Chrome.
 
-## Ce que fait l'application (version 26)
+## Ce que fait l'application (version 27)
 
 - Calage automatique de la cible, avec correction de perspective, et poignées de réglage manuel.
 - Détection des impacts, correction à la main : ajouter, supprimer, déplacer, annuler.
@@ -109,6 +109,23 @@ Son matériel et ses habitudes :
   cordon (le calage initial en exige toujours trois). Résultats : 0 fausse annonce sur la paire réelle et sur 45 images
   bougées ; longue-vue simulée avec les photos des séries 2 et 3 du 23/10 (même lumière) : 4 impacts annoncés,
   « 9 points » à 3, 9, 4 et 4 heures, les 4 coups séparés de la série 3 ; le 5e, dans la déchirure, n'est pas vu.
+- Stand du 01/11 et v27. Mode Longue-Vue : voix muette. Photos prises après chaque coup (5 coups, 25 m, cible à 10
+  noir, soleil en bande), importées en mode photo : 4 coups sur 5, 15 faux trous. Causes, vérifiées sur les photos et
+  sur les captures de l'utilisateur : (1) les chiffres blancs « 8 » et « 9 » du visuel, éclatants, survivent au nettoyage
+  à ~3,7 px/mm ; ils entrent aussi dans la mémoire « déjà troué », même supprimés à la main, et deux coups tombés sur le
+  « 9 » et le « 8 » du bas étaient perdus ; (2) le champ de l'oculaire déborde de l'image : la méthode du disque entier
+  (v24) ne le voyait plus, d'où des faux trous au bord sombre ; (3) en direct, la confirmation exigeait le même ensemble
+  de trous sur trois images. La bande de soleil ne donnait qu'un faux trou. Corrections : (1) candidat « chiffre »
+  (centré à 3 mm sur l'emplacement, ≥ 20 % d'encre claire neutre, < 30 % de sombre) écarté avant la mémoire ; mesures :
+  chiffres 22–91 % d'encre et 2–15 % de sombre, vrais trous 94–100 % de sombre ; exception en mode séries pour un candidat
+  nouveau de la taille d'une balle (coup du 11/10 au centre du « 7 » : 64 mm², chiffres apparus après coup ≤ 48 mm²).
+  Deux essais écartés : écarter les pixels d'encre un à un (11/10 : 28 → 14 puis 25 coups) ; (2) cercle de l'oculaire
+  ajusté par moindres carrés sur le contour clair/noir extérieur (quatre passes de 25 % à 4 %), aucune des 21 photos
+  ordinaires du banc ne le déclenche ; recadrage limité à la photo (peindre au-delà créait des faux trous le long des
+  côtés) ; bord du champ traité comme le bord d'une photo (3 mm) ; photos importées à l'oculaire recadrées aussi ;
+  (3) confirmation trou par trou ; en direct, chiffres écartés sans exception, tolérance 5 mm sur l'axe et 4,5 sur le rayon.
+  Résultats : 01/11 en mode photo 5/5 et 4 en trop ; les quatre autres séances inchangées ; rejeu en direct du 01/11 :
+  4 coups annoncés sur 4, 1 fausse annonce ; 45 images bougées et paire du 28/10 : 0 fausse annonce.
 - Rotation entre photos (v22). Mesure de référence hors de l'appli : corrélation angulaire, sur 360°, de chacun des trois
   anneaux de chiffres (9, 8, 7) entre la photo k et la photo 1 ; les trois concordent à 0,05° près sur 11 paires de photos.
   Sur le 23/10, la v21 (centre des pixels blancs des quatre « 9 ») donnait 1,44 / 0,77 / 0,73 / −0,11 / 0,70° pour

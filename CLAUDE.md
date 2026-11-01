@@ -30,7 +30,7 @@ pas à pas, sans jargon, et propose toujours le chemin le plus simple.
 | `sw.js` | Service worker : cache pour le fonctionnement hors ligne. |
 | `manifest.webmanifest`, `icon-*.png`, `apple-touch-icon.png` | Installation comme appli (PWA). |
 | `tests/detection.test.cjs` | Test de non-régression de la détection. |
-| `tests/photos/` | Séances réelles : 02/10/2026 (9 mm, 10 m, 3 photos), 04/10/2026 (9 mm, 25 m, 2 photos, plus deux recadrages pour le calage), DDM4 .300 BLK (25 m, 3 photos de 5 coups ; la série 1 porte les annotations au pied à coulisse de l'utilisateur), 11/10/2026 (9 mm, 25 m, 5 photos : 10 + 5 + 5 + 5 + 5 coups), 23/10/2026 (P320 X-Carry, 9 mm, 15 m, fond bleu, 6 photos de 5 coups). |
+| `tests/photos/` | Séances réelles : 02/10/2026 (9 mm, 10 m, 3 photos), 04/10/2026 (9 mm, 25 m, 2 photos, plus deux recadrages pour le calage), DDM4 .300 BLK (25 m, 3 photos de 5 coups ; la série 1 porte les annotations au pied à coulisse de l'utilisateur), 11/10/2026 (9 mm, 25 m, 5 photos : 10 + 5 + 5 + 5 + 5 coups), 23/10/2026 (P320 X-Carry, 9 mm, 15 m, fond bleu, 6 photos de 5 coups), 01/11/2026 (9 mm, 25 m, photos prises à l'oculaire d'une longue-vue, cible à 10 noir, 5 photos d'un coup). |
 | `tests/attendu*.json` | Résultats de référence, vérifiés sur l'image et contre le comptage de l'utilisateur. |
 | `tests/verite-*.json` | Vérité terrain : positions de l'utilisateur après correction, tirées de sa sauvegarde `.json`. Base du banc d'essai. |
 | `docs/PASSATION.md` | Historique, mesures au pied à coulisse, décisions et pistes. |
@@ -43,8 +43,8 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v26` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v26`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v27` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v27`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,
@@ -126,7 +126,8 @@ jauge (149), dont 5 coups placés dans des déchirures ; et le calage sur deux r
 **Banc d'essai (vérité terrain).** Pour la séance du 11/10/2026, le test compare aussi l'appli aux 30 positions
 corrigées par l'utilisateur (`tests/verite-2026-10-11.json`) : coups retrouvés à 3 mm dans la bonne série, et
 impacts en trop. Niveau de la v14 : 28 sur 30, 4 en trop. Même banc pour la séance du 23/10/2026
-(`tests/verite-2026-10-23.json`) : 28 sur 30, 2 en trop depuis la v22. Le test vérifie aussi chaque rotation entre
+(`tests/verite-2026-10-23.json`) : 28 sur 30, 2 en trop depuis la v22. Et pour le 01/11/2026 (`tests/verite-2026-11-01.json`,
+photos à l'oculaire) : 5 sur 5, 4 en trop depuis la v27 (4 sur 5 et 15 en trop en v26). Le test vérifie aussi chaque rotation entre
 photos à 0,2° près contre une référence (`rotRef`) mesurée hors de l'appli sur les trois anneaux de chiffres. Attention :
 la vérité terrain hérite du recalage de l'appli du téléphone pour les coups non déplacés, elle ne juge pas la rotation. Le plancher échoue si l'on recule ; quand une
 amélioration le dépasse, relève-le. Chaque nouvelle séance avec photos et sauvegarde `.json` s'ajoute de la
@@ -144,8 +145,13 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
 - Dans les grandes déchirures, le nombre d'impacts est fiable avec le mode séries, mais leur position
   est estimée. Sur le 02/10, le coup placé en série 3 tombe à 17 mm de la position notée par l'utilisateur
   (même zone, même score) : ne présente jamais une position estimée comme mesurée.
-- Validé sur trois séances réelles : 9 mm à 10 et 25 m, .300 BLK supersonique à 25 m. Rien n'a été testé au
-  .300 Win Mag, en subsonique, au-delà de 25 m, ni sur le modèle de C50 à 10 noir.
+- Validé sur des séances réelles : 9 mm à 10, 15 et 25 m, .300 BLK supersonique à 25 m ; le modèle à 10 noir sur une
+  seule séance (01/11, photos à l'oculaire). Rien n'a été testé au .300 Win Mag, en subsonique, ni au-delà de 25 m.
+- Chiffres blancs du visuel (v27) : un candidat centré sur l'emplacement d'un chiffre (3 mm), fait d'encre claire et
+  neutre (≥ 20 %) et presque sans sombre (< 30 %) est écarté, et retiré de la mémoire « déjà troué ». En mode séries,
+  s'il apparaît sur un chiffre jamais pris pour un trou avant et qu'il a la taille d'une balle (≥ 85 % de la section de
+  l'ogive), il est gardé : c'est un coup. Sur la première photo, un coup sur fond clair tombé au centre d'un chiffre
+  peut donc être écarté.
 - Au .300 BLK, le trou visible est plus petit que l'ogive (5,6 à 7,8 mm pour 7,82 mm) : près d'un cordon,
   le comptage à l'œil peut donner un point de moins que la jauge et que l'appli.
 - Fond sombre derrière la cible : à travers un trou du visuel noir, il peut avoir la luminance du carton.
@@ -164,6 +170,10 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
   nouvelle référence sans rien annoncer (un coup tiré à cet instant est perdu) ; marge d'exclusion de 2 mm autour de
   l'existant. Deux images réelles du 28/10 (lumière et zoom différents) ne donnent plus de fausse annonce. Un artefact
   qui reste au même endroit sur trois images peut encore être annoncé ; une balle passée dans un trou existant ne l'est pas.
+  v27 : confirmation trou par trou (la voix était restée muette au stand le 01/11 : des faux trous qui clignotent
+  empêchaient de confirmer le vrai) ; cercle de l'oculaire ajusté sur son contour, même s'il déborde de l'image ; bord du
+  champ traité comme le bord d'une photo ; photos importées prises à l'oculaire recadrées de la même façon. Rejeu du
+  01/11 en direct : les 4 coups suivant le calage annoncés, 1 fausse annonce (bande d'ombre). Jamais vérifié en direct.
 - Ombre portée sur la zone claire (carton courbé en haut) : depuis la v21, un morceau de cordon épaissi par l'ombre,
   allongé et au contour mou, est rejeté (3 faux trous de moins le 23/10). Une ombre plus nette ou un vrai trou très
   allongé dans le clair pourraient passer du mauvais côté de la règle : elle n'est réglée que sur 5 séances.

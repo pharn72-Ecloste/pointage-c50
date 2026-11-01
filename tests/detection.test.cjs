@@ -35,6 +35,11 @@ const SEANCES = [
   { nom: "23/10/2026", ref: "attendu-2026-10-23.json", coups: [5, 5, 5, 5, 5, 5],
     verite: "verite-2026-10-23.json", plancher: { trouves: 28, enTrop: 2 }, rotRef: [null, 1.79, 1.18, 1.98, 1.54, 2.88],
     photos: ["2026-10-23_serie1.jpg", "2026-10-23_serie2.jpg", "2026-10-23_serie3.jpg", "2026-10-23_serie4.jpg", "2026-10-23_serie5.jpg", "2026-10-23_serie6.jpg"] },
+  // 01/11/2026 : 25 m, photos prises à l'oculaire d'une longue-vue, cible à 10 noir, un coup par photo. Pièges : chiffres
+  // blancs du visuel pris pour des trous (deux coups tombés sur le « 9 » et le « 8 » du bas), bord sombre de l'oculaire.
+  { nom: "01/11/2026", ref: "attendu-2026-11-01.json", coups: [1, 1, 1, 1, 1],
+    verite: "verite-2026-11-01.json", plancher: { trouves: 5, enTrop: 4 },
+    photos: ["2026-11-01_coup1.jpg", "2026-11-01_coup2.jpg", "2026-11-01_coup3.jpg", "2026-11-01_coup4.jpg", "2026-11-01_coup5.jpg"] },
 ];
 const TOL_VERITE_MM = 3.0;   // un coup est « retrouvé » s'il est à moins de 3 mm de la position de l'utilisateur, dans la même série
 // photo recadrée de 200 px en haut -> même échelle, centre décalé de 200 px vers le haut

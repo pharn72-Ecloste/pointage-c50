@@ -1,0 +1,44 @@
+{
+ "seance": "01/11/2026",
+ "source": "sauvegarde .json de l'utilisateur, positions après ses corrections, une série par photo ; seules les 5 premières photos (un coup chacune) sont fournies",
+ "arme": "P320 X-Five Legion",
+ "calibre": "9 mm Luger",
+ "caliberMm": 9,
+ "distanceM": 25,
+ "mun": "MAGTECH 124 GR",
+ "prise": "photos prises à l'oculaire d'une longue-vue (Samsung S21, SV28), cible C50 à 10 noir, soleil en bande",
+ "coupsParPhoto": [
+  1,
+  1,
+  1,
+  1,
+  1
+ ],
+ "shots": [
+  [
+   48.1,
+   -47.7,
+   0
+  ],
+  [
+   5.5,
+   -40.6,
+   1
+  ],
+  [
+   60.7,
+   -12.8,
+   2
+  ],
+  [
+   3.9,
+   -67.8,
+   3
+  ],
+  [
+   37.8,
+   41.6,
+   4
+  ]
+ ]
+}
