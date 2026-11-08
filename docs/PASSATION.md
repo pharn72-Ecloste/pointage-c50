@@ -137,6 +137,12 @@ Son matériel et ses habitudes :
   bord. Banc inchangé. 06/11 en v28 : 9 coups sur 25 à la bonne photo, 14 faux, 3 estimés dans la cible (1 juste) ; l'écart
   avec la v27 vient du recalage par les trous, instable sur ces photos (décalage de 3 à 4 mm aux photos 8–9). Essai
   d'une variante sans estimation sur les images d'oculaire : rejeté, la séance DDM4 tombait (149 → 129 points), signe que ses photos sont recadrées comme prises à l'oculaire : à vérifier.
+- v29, import par lot, demandé par l'utilisateur après la saisie du 06/11 (30 photos une à une). Tri par le dernier
+  groupe de chiffres du nom (numérotation de la galerie Android), sinon par date du fichier. Coups modifiables photo par
+  photo (séries de 1 à 5 coups). Chaque série garde son calage (poignées, perspective) ; les impacts sont tenus en mm et
+  replacés sur la photo de la série affichée, les séries suivantes mises de côté. Enregistrer revient d'abord à la
+  dernière série, pour tout sauver. Essai sur le 06/11 : 30 photos analysées en ~40 s sur la machine de test, mêmes
+  impacts par série que l'import photo par photo ; banc inchangé.
 - Rotation entre photos (v22). Mesure de référence hors de l'appli : corrélation angulaire, sur 360°, de chacun des trois
   anneaux de chiffres (9, 8, 7) entre la photo k et la photo 1 ; les trois concordent à 0,05° près sur 11 paires de photos.
   Sur le 23/10, la v21 (centre des pixels blancs des quatre « 9 ») donnait 1,44 / 0,77 / 0,73 / −0,11 / 0,70° pour

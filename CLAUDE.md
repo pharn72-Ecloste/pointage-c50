@@ -43,8 +43,8 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v28` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v28`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v29` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v29`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,
@@ -184,6 +184,11 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
   de l'oculaire (06/11 : 11 coups à 12–15 cm du centre, hors du carton) ; sur cette séance il tombe alors dans une vraie
   déchirure, au bon endroit 1 fois sur 3. Le recalage par les trous s'y décale de 3 à 4 mm sur certaines photos à
   l'oculaire (photos 8–9) : à traiter avec la détection.
+- Import par lot (v29) : « Importer une série de photos » prend toutes les photos d'une séance, une par série, rangées
+  par numéro de fichier (sinon par date) ; liste à vérifier (ordre, doublons, coups par photo), puis analyse enchaînée,
+  identique à « Photo série suivante » photo après photo (06/11 : mêmes impacts par série). Revue « ◀ Série k / N ▶ » :
+  chaque série sur sa photo (redécodée à la demande, les fichiers ne sont pas gardés après la séance), anciens impacts
+  en gris, « Détecter » désactivé hors de la dernière série. Corriger une série ne recalcule pas les suivantes.
 - La rotation de la première photo n'est pas corrigée (seule la rotation entre photos d'une série l'est) :
   une photo penchée fausse la répartition horizontal/vertical, pas le score.
 
