@@ -72,6 +72,16 @@ button,select,input{font:inherit;color:inherit}
 .toolbar .sp{flex:1}
 .stage{position:relative;background:var(--stage);height:min(72vh,720px);min-height:340px;touch-action:none;user-select:none;-webkit-user-select:none}
 .stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+.lotbox{padding:10px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.lotlist{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.lotrow{display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--line);font-size:12px}
+.lotrow:last-child{border-bottom:0}
+.lotrow img{width:44px;height:44px;object-fit:cover;border-radius:4px;background:var(--line)}
+.lotrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono)}
+.lotrow input{width:52px}
+.lotrow button{padding:3px 7px}
+.lotnav{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px}
+.lotnav .warn{color:var(--accent);font-weight:600}
 .badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.62);color:#fff;font:500 12px var(--mono);padding:4px 8px;border-radius:6px;pointer-events:none}
 .zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:6px}
 .zoom button{width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.55);color:#fff;font:600 18px var(--body);cursor:pointer}
@@ -181,6 +191,8 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
           <input id="fileCam" type="file" accept="image/*" capture="environment" hidden>
           <label class="btn" for="fileGal">Importer</label>
           <input id="fileGal" type="file" accept="image/*" hidden>
+          <label class="btn" for="fileLot" title="Choisis toutes les photos d'une séance, une par série">Importer une série de photos</label>
+          <input id="fileLot" type="file" accept="image/*" multiple hidden>
           <span class="sp"></span>
           <div class="seg" id="modes" role="group" aria-label="Mode d'édition">
             <button data-mode="calib" aria-pressed="false">Calibrer</button>
@@ -189,6 +201,18 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
             <button data-mode="move" aria-pressed="false">Déplacer</button>
           </div>
           <label class="addser" id="addSerWrap" hidden>Ajout en <select id="fAddSer"></select></label>
+        </div>
+        <div class="lotbox" id="lotBox" hidden>
+          <div><b id="lotTitle"></b> <span class="muted" id="lotOrder"></span></div>
+          <div class="row" style="gap:8px;align-items:center">Coups pour toutes : <input id="lotAll" type="number" min="0" step="1" value="1" style="width:60px"> <button class="btn ghost" id="lotAllOk">Appliquer</button></div>
+          <div class="lotlist" id="lotList"></div>
+          <div class="row" style="gap:8px"><button class="btn primary" id="lotGo">Analyser</button><button class="btn ghost" id="lotNo">Annuler</button><span class="muted" id="lotProg"></span></div>
+        </div>
+        <div class="lotnav" id="lotNav" hidden>
+          <button class="btn" id="lotPrev" aria-label="Série précédente">◀</button>
+          <b id="lotLbl"></b>
+          <button class="btn" id="lotNext" aria-label="Série suivante">▶</button>
+          <span id="lotInfo" class="muted"></span>
         </div>
         <div class="stage" id="stage">
           <canvas id="cv"></canvas>
@@ -1181,6 +1205,8 @@ function currentShots(){
   return state.holes.map(h => { const m = imgToMm(cal, h.x, h.y); if (h.o != null) m.o = h.o; return m; });
 }
 
+// revue d'un lot (v29) : seuls les impacts de la série affichée sont en couleur, les plus anciens en gris
+const holeColor = h => lot && !lot.running && (h.s||0) < state.curSeries ? "rgba(190,190,190,.75)" : serColor(h.s);
 function render(){
   ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cv.width,cv.height);
   if (!state.img) return;
@@ -1206,7 +1232,7 @@ function render(){
   const shots = currentShots(), st = computeStats(shots, cal_mm, +$("fDist").value);
   ctx.lineWidth = 2*lw;
   state.holes.forEach((h,i) => { const u = shots[i]; disc(u.x, u.y, cal_mm/2);
-    ctx.strokeStyle = serColor(h.s); ctx.setLineDash(h.split?[4*lw,3*lw]:[]); ctx.stroke(); });
+    ctx.strokeStyle = holeColor(h); ctx.setLineDash(h.split?[4*lw,3*lw]:[]); ctx.stroke(); });
   ctx.setLineDash([]);
   const fa = analyzeFliers(shots, cal_mm, +$("fDist").value, $("fHand").value);
   if (st.n >= 2 && st.esI != null){ // écart : segment entre les deux impacts les plus éloignés
@@ -1231,7 +1257,7 @@ function render(){
   state.holes.forEach((h,i) => { const p = toScreen(h), rr = Math.max(7, cal_mm/2*cal.pxmm*v.s);
     const txt = multi ? `${i+1}·s${(h.s||0)+1}` : String(i+1), w = Math.max(18, ctx.measureText(txt).width + 6);
     ctx.fillStyle="rgba(0,0,0,.65)"; ctx.fillRect(p.x+rr+1, p.y-rr-8, w, 14);
-    ctx.fillStyle=serColor(h.s); ctx.fillText(txt, p.x+rr+1+w/2, p.y-rr-1); });
+    ctx.fillStyle=holeColor(h); ctx.fillText(txt, p.x+rr+1+w/2, p.y-rr-1); });
   if (st.n >= 1){ const p = toScreen(mmToImg(cal, st.mx, st.my));
     ctx.strokeStyle=acc; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(p.x-10,p.y); ctx.lineTo(p.x+10,p.y); ctx.moveTo(p.x,p.y-10); ctx.lineTo(p.x,p.y+10); ctx.stroke(); }
   const c0 = toScreen({x:cal.cx, y:cal.cy});
@@ -1337,22 +1363,134 @@ $("bClear").onclick = () => { if (!state.holes.length) return; pushUndo(); state
 $("bDetect").onclick = () => { pushUndo(); state.holes = detectAndMerge(); refresh(); };
 $("bAutoCal").onclick = () => { pushUndo(); const ok = calibrate(); if (!ok || state.calSuspect) setMode("calib"); fit(); refresh(); if (ok && state.calSuspect) $("hint").innerHTML = CAL_DOUTE + HINTS.calib; };
 
+// photo → zone de dessin prête pour l'analyse. Toujours le même résultat pour un même fichier : la revue d'un lot
+// (v29) redécode la photo d'une série au lieu de garder 30 images en mémoire.
+function decodeFile(file){
+  return new Promise((ok, ko) => {
+    const url = URL.createObjectURL(file), im = new Image();
+    im.onload = () => {
+      const MAXS = 2600, s = Math.min(1, MAXS/Math.max(im.naturalWidth, im.naturalHeight));
+      const c = document.createElement("canvas"); c.width = Math.round(im.naturalWidth*s); c.height = Math.round(im.naturalHeight*s);
+      c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      // photo prise à l'oculaire d'une longue-vue : le noir autour du champ est repeint couleur papier, comme en mode direct
+      // (01/11 : faux trous le long du bord sombre du champ). Une photo ordinaire n'est pas touchée (aucune du banc).
+      const oc = lvFindOculaire(c);
+      ok(oc ? lvCrop(c, oc) : c);
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); ko(new Error("illisible")); };
+    im.src = url;
+  });
+}
 function loadFile(file, next){
   if (!file) return;
   lastFileSig = fileSig(file);
-  const url = URL.createObjectURL(file), im = new Image();
-  im.onload = () => {
-    const MAXS = 2600, s = Math.min(1, MAXS/Math.max(im.naturalWidth, im.naturalHeight));
-    const c = document.createElement("canvas"); c.width = Math.round(im.naturalWidth*s); c.height = Math.round(im.naturalHeight*s);
-    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
-    // photo prise à l'oculaire d'une longue-vue : le noir autour du champ est repeint couleur papier, comme en mode direct
-    // (01/11 : faux trous le long du bord sombre du champ). Une photo ordinaire n'est pas touchée (aucune du banc).
-    const oc = lvFindOculaire(c);
-    setImage(oc ? lvCrop(c, oc) : c, false, next);
-  };
-  im.onerror = () => { $("hint").innerHTML = "<b>Image illisible.</b> Essaie un JPEG ou un PNG."; };
-  im.src = url;
+  if (!next) lotEnd();
+  decodeFile(file).then(c => setImage(c, false, next), () => { $("hint").innerHTML = "<b>Image illisible.</b> Essaie un JPEG ou un PNG."; });
 }
+
+// ---------- import d'une séance par lot (v29) ----------
+// Toutes les photos d'une séance d'un coup, une par série : rangées par numéro de fichier (1000008984, 8985…) ou, à
+// défaut, par date, puis analysées l'une après l'autre comme avec « Photo série suivante ». La revue montre ensuite
+// chaque série sur sa propre photo : impacts de la série en couleur, anciens en gris ; on corrige, puis on passe à la
+// suivante. Les photos ne sont gardées que le temps de la séance (fichiers, redécodés à la demande) ; la sauvegarde ne
+// garde que les impacts, comme avant. Corriger une série ne recalcule pas les suivantes.
+let lot = null;   // {items:[{file, url, coups, cal, found, doute}], k, master, hidden, running}
+const numOf = f => { const m = f.name.replace(/\.[^.]*$/, "").match(/(\d+)(?!.*\d)/); return m ? +m[1] : null; };
+function lotSort(files){
+  const nums = files.map(numOf), parNum = nums.every(n => n != null) && new Set(nums).size === nums.length;
+  const items = files.map(f => ({file: f, coups: 1}));
+  items.sort(parNum ? (a, b) => numOf(a.file) - numOf(b.file) : (a, b) => a.file.lastModified - b.file.lastModified || a.file.name.localeCompare(b.file.name));
+  return {items, ordre: parNum ? "rangées par numéro de fichier" : "rangées par date de prise de vue"};
+}
+function lotEnd(){
+  if (lot) lot.items.forEach(it => { if (it.url) URL.revokeObjectURL(it.url); });
+  lot = null; $("lotBox").hidden = true; $("lotNav").hidden = true; $("bNext").hidden = false; $("bDetect").disabled = false;
+}
+function lotRenderList(){
+  const n = lot.items.length;
+  $("lotTitle").textContent = `${n} photo${n>1?"s":""}, une par série`;
+  $("lotGo").textContent = `Analyser les ${n} photo${n>1?"s":""}`; $("lotGo").disabled = !n || lot.running;
+  $("lotList").innerHTML = lot.items.map((it, i) => { if (!it.url) it.url = URL.createObjectURL(it.file);
+    const d = new Date(it.file.lastModified), hh = String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+    return `<div class="lotrow"><b style="width:26px">${i+1}</b><img src="${it.url}" loading="lazy" decoding="async" alt=""><span class="nm" title="${esc(it.file.name)}">${esc(it.file.name.length > 14 ? "…" + it.file.name.slice(-12) : it.file.name)} · ${hh}</span>`
+      + `<label>coups <input type="number" min="0" step="1" value="${it.coups}" data-c="${i}"></label>`
+      + `<button class="btn ghost" data-up="${i}" ${i?"":"disabled"} aria-label="Monter">↑</button><button class="btn ghost" data-dn="${i}" ${i<n-1?"":"disabled"} aria-label="Descendre">↓</button><button class="btn ghost" data-rm="${i}" aria-label="Retirer">✕</button></div>`; }).join("");
+}
+$("fileLot").onchange = e => { const files = [...e.target.files]; e.target.value = ""; if (!files.length) return;
+  lotEnd(); const {items, ordre} = lotSort(files); lot = {items, k: 0, master: [], hidden: []};
+  $("lotOrder").textContent = `(${ordre} : vérifie l'ordre, retire les doublons, indique les coups de chaque photo)`;
+  $("lotAll").value = Math.max(0, Math.round(+$("fShots").value) || 1); lot.items.forEach(it => it.coups = +$("lotAll").value);
+  $("lotProg").textContent = ""; $("lotBox").hidden = false; lotRenderList(); };
+$("lotList").addEventListener("input", e => { const i = e.target.dataset.c; if (i != null && lot) lot.items[+i].coups = Math.max(0, Math.round(+e.target.value) || 0); });
+$("lotList").addEventListener("click", e => { if (!lot || lot.running) return; const b = e.target.closest("button"); if (!b) return; const it = lot.items;
+  if (b.dataset.up != null){ const i = +b.dataset.up; [it[i-1], it[i]] = [it[i], it[i-1]]; }
+  else if (b.dataset.dn != null){ const i = +b.dataset.dn; [it[i+1], it[i]] = [it[i], it[i+1]]; }
+  else if (b.dataset.rm != null){ const [x] = it.splice(+b.dataset.rm, 1); if (x.url) URL.revokeObjectURL(x.url); }
+  lotRenderList(); });
+$("lotAllOk").onclick = () => { if (!lot) return; const v = Math.max(0, Math.round(+$("lotAll").value) || 0); lot.items.forEach(it => it.coups = v); lotRenderList(); };
+$("lotNo").onclick = () => { if (lot && !lot.running) lotEnd(); };
+const tick = () => new Promise(r => setTimeout(r, 30));
+const calCopy = () => ({handles: JSON.parse(JSON.stringify(state.handles)), persp: (state.persp || [0,0]).slice(),
+  calInfo: state.calInfo, calSuspect: state.calSuspect, lastDetect: state.lastDetect});
+$("lotGo").onclick = async () => {
+  if (!lot || lot.running || !lot.items.length) return;
+  lot.running = true; $("lotGo").disabled = true; photoSnap = null;
+  const fs0 = $("fShots").value, its = lot.items;
+  try {
+    for (let i = 0; i < its.length; i++){
+      $("lotProg").textContent = `Analyse de la photo ${i+1} sur ${its.length}…`; await tick();
+      $("fShots").value = String(its[i].coups);
+      const c = await decodeFile(its[i].file);
+      if (i && !prepareNextSeries()){ $("lotProg").textContent = `Arrêt à la photo ${i+1} : la photo précédente n'est pas calée. Recale-la puis recommence.`; its.length = i; break; }
+      setImage(c, false, i > 0);
+      its[i].cal = calCopy(); its[i].doute = !getCal() || !!state.calSuspect;
+      its[i].found = state.holes.filter(h => (h.s||0) === state.curSeries && !h.est).length;
+    }
+  } catch(err){ $("lotProg").textContent = "Une photo est illisible : retire-la de la liste."; lot.running = false; $("lotGo").disabled = false; return; }
+  $("fShots").value = fs0; lot.running = false;
+  lot.k = its.length - 1; lot.hidden = []; $("lotBox").hidden = true;
+  lotShowNav(); refresh(); $("fAddSer").value = String(lot.k);
+  $("hint").innerHTML = `<b>${its.length} séries analysées.</b> Passe-les en revue avec ◀ ▶ : chaque série s'affiche sur sa photo, les impacts plus anciens en gris. Le signe ⚠ marque une série où le nombre de trous trouvés diffère des coups annoncés.`;
+};
+// impacts de la vue courante (séries ≤ k, sur la photo k) → repère de la cible (mm), puis réunis avec les séries cachées
+function lotStash(){
+  const cal = getCal(); if (!lot || !cal) return;
+  lot.items[lot.k].cal = calCopy();
+  lot.master = state.holes.map(h => ({...h, mm: imgToMm(cal, h.x, h.y)})).concat(lot.hidden);
+}
+async function lotShow(k){
+  if (!lot || k < 0 || k >= lot.items.length || lot.running) return;
+  lotStash(); lot.running = true;
+  try {
+    const it = lot.items[k], c = await decodeFile(it.file);
+    state.img = c; state.sample = false; state.handles = JSON.parse(JSON.stringify(it.cal.handles)); state.persp = it.cal.persp.slice();
+    state.calInfo = it.cal.calInfo; state.calSuspect = it.cal.calSuspect; state.lastDetect = it.cal.lastDetect;
+    const cal = getCal(), toImg = h => { const p = mmToImg(cal, h.mm.x, h.mm.y), o = {...h, x: p.x, y: p.y}; delete o.mm; return o; };
+    state.holes = lot.master.filter(h => (h.s||0) <= k).map(toImg);
+    lot.hidden = lot.master.filter(h => (h.s||0) > k);
+    lot.k = k; state.curSeries = k; state.undo = []; $("bUndo").disabled = true;
+    $("fShots").value = String(it.coups);
+    fit(); setMode(it.doute ? "calib" : "add");
+    if (it.doute) $("hint").innerHTML = CAL_DOUTE + HINTS.calib;
+  } finally { lot.running = false; }
+  lotShowNav(); refresh(); $("fAddSer").value = String(k);   // un impact ajouté va dans la série affichée
+}
+function lotShowNav(){
+  const n = lot.items.length, k = lot.k, it = lot.items[k];
+  $("lotNav").hidden = false; $("lotPrev").disabled = k === 0; $("lotNext").disabled = k === n-1;
+  $("lotLbl").textContent = `Série ${k+1} / ${n}`;
+  const nb = state.holes.filter(h => (h.s||0) === k).length, warn = nb !== it.coups || it.doute;
+  $("lotInfo").innerHTML = `${esc(it.file.name)} · ${nb} impact${nb>1?"s":""} pour ${it.coups} coup${it.coups>1?"s":""} annoncé${it.coups>1?"s":""}`
+    + (it.doute ? ` · <span class="warn">⚠ calage douteux</span>` : nb !== it.coups ? ` · <span class="warn">⚠ à vérifier</span>` : "")
+    + ` · ${lot.items.filter(x => x.found !== x.coups || x.doute).length} série(s) sur ${n} à vérifier après l'analyse`;
+  $("badge").hidden = false; $("badge").textContent = `Série ${k+1}`;
+  $("bNext").hidden = k !== n-1;          // une photo de plus ne s'ajoute qu'après la dernière série
+  $("bDetect").disabled = k !== n-1;      // la détection compare à la photo précédente : seule la dernière série a la bonne
+  $("bPrevPhoto").hidden = true;
+}
+$("lotPrev").onclick = () => lot && lotShow(lot.k - 1);
+$("lotNext").onclick = () => lot && lotShow(lot.k + 1);
+$("fShots").addEventListener("input", () => { if (lot && !lot.running && lot.items[lot.k]){ lot.items[lot.k].coups = Math.max(0, Math.round(+$("fShots").value) || 0); lotShowNav(); } });
 // « Annuler la dernière photo » (v28) : avant chaque « Photo série suivante », l'état de l'onglet est copié (photo,
 // impacts, calage, mémoire « déjà troué ») ; le bouton le remet, et la série ajoutée disparaît avec sa photo. Le 06/11,
 // une même photo importée deux fois avait laissé une série vide qu'on ne pouvait plus retirer. Un seul niveau : chaque
@@ -1375,6 +1513,7 @@ $("bPrevPhoto").onclick = restorePhoto;
 $("fileCam").onchange = e => { loadFile(e.target.files[0]); e.target.value=""; };
 $("fileGal").onchange = e => { loadFile(e.target.files[0]); e.target.value=""; };
 $("fileNext").onchange = e => { const f = e.target.files[0]; e.target.value=""; if (!f) return;
+  if (lot){ lotStash(); lotEnd(); }    // après la dernière série d'un lot : on reprend le fonctionnement photo par photo
   const snap = snapPhoto(), meme = !!lastFileSig && fileSig(f) === lastFileSig;
   if (!prepareNextSeries()){ loadFile(f); return; }
   photoSnap = snap; nextFromFile = {meme}; loadFile(f, true); };
@@ -1621,11 +1760,12 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v28");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v29");
     renderHistory();
   }
 }
 async function saveSession(){
+  if (lot && lot.k !== lot.items.length - 1) await lotShow(lot.items.length - 1);   // revue d'un lot : tous les impacts
   const cal_mm = calMm(), dist = +$("fDist").value, shots = currentShots();
   if (!shots.length) return;
   const calLabel = $("fCal").selectedOptions[0].textContent.split(" · ")[0];
@@ -2316,6 +2456,7 @@ function lvTick(){
 }
 
 $("bLvCal").onclick = () => {
+  lotEnd();
   const raw = lvRaw(2600); lvCircle = raw ? lvFindOculaire(raw) : null;
   const c = lvCrop(raw, lvCircle); if (!c){ lvStatus("La caméra n'a pas encore d'image : réessaie dans une seconde."); return; }
   if (!state.sample && state.holes.length && !confirm("Le mode direct remplace la photo et les impacts de l'onglet Analyse. Continuer ?")) return;
