@@ -202,7 +202,10 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
 - Contrôle par la photo précédente (v30, photos à la longue-vue) : réglé sur deux séances seulement (01/11 et 06/11,
   25 m, fond sombre derrière la cible). Un coup ajouté par ce contrôle est placé au centre de la zone assombrie, qui
   peut s'écarter de 3 mm du trou (06/11, série 8). Si aucun coup n'a laissé de trace (balle passée dans un trou), la
-  plus forte zone assombrie par le flou autour d'un ancien trou peut être prise pour lui (06/11, séries 14 et 21).
+  plus forte zone assombrie par le flou autour d'un ancien trou peut être prise pour lui (06/11, séries 14 et 21, à 5 cm
+  du vrai coup). Ces coups (18 sur 30 le 06/11, dont 3 faux) sont donc marqués `est` et `diff` : cercle en pointillé,
+  message dédié, série comptée « à vérifier » dans l'import par lot ; la marque suit la série aux photos suivantes et
+  tombe quand l'utilisateur déplace le cercle (de même pour un coup estimé dans une déchirure).
 - La rotation de la première photo n'est pas corrigée (seule la rotation entre photos d'une série l'est) :
   une photo penchée fausse la répartition horizontal/vertical, pas le score.
 

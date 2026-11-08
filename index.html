@@ -1047,7 +1047,7 @@ function prepareNextSeries(){
   for (let i=0;i<grid.length;i++) if (grid[i] && (k++ % stride === 0)) pts.push([(i%G + 0.5)*GRID_C - 260, (Math.floor(i/G) + 0.5)*GRID_C - 260]);
   state.prevGrid = grid; state.prevPts = pts; state.prevTex = TEX_ALIGN ? texPoints(texGrad(cal, 105)) : null;
   state.prevLum = TEX_ALIGN ? lumRaster(cal, 110) : null;
-  state.carry = state.holes.map(h => ({mm: imgToMm(cal, h.x, h.y), s: h.s||0, split: h.split, o: h.o, manual: h.manual}));
+  state.carry = state.holes.map(h => ({mm: imgToMm(cal, h.x, h.y), s: h.s||0, split: h.split, o: h.o, manual: h.manual, est: h.est, diff: h.diff}));
   state.curSeries = state.holes.reduce((m,h)=>Math.max(m, h.s||0), state.curSeries) + 1;
   return true;
 }
@@ -1243,7 +1243,9 @@ function diffRefine(holes){
       if (near(x, y, 7) || !nouveau(x, y)) continue;
       added.push({x, y}); }
     info.ajout = added.length;
-    const p = added.map(m => { const q = mmToImg(cal, m.x, m.y); return {x: q.x, y: q.y, diff: true}; });
+    // position déduite de la zone assombrie, pas d'un trou mesuré : dessinée en pointillé et comptée « à vérifier »
+    // (06/11 : 3 faux sur 18, dont deux à 5 cm du vrai coup)
+    const p = added.map(m => { const q = mmToImg(cal, m.x, m.y); return {x: q.x, y: q.y, est: true, diff: true}; });
     kept = real.concat(p, est.slice(0, Math.max(0, missing - added.length)));
   }
   if (state.lastDetect) state.lastDetect.diff = info;
@@ -1376,7 +1378,7 @@ function render(){
   const shots = currentShots(), st = computeStats(shots, cal_mm, +$("fDist").value);
   ctx.lineWidth = 2*lw;
   state.holes.forEach((h,i) => { const u = shots[i]; disc(u.x, u.y, cal_mm/2);
-    ctx.strokeStyle = holeColor(h); ctx.setLineDash(h.split?[4*lw,3*lw]:[]); ctx.stroke(); });
+    ctx.strokeStyle = holeColor(h); ctx.setLineDash(h.split || h.est ? [4*lw,3*lw] : []); ctx.stroke(); });
   ctx.setLineDash([]);
   const fa = analyzeFliers(shots, cal_mm, +$("fDist").value, $("fHand").value);
   if (st.n >= 2 && st.esI != null){ // écart : segment entre les deux impacts les plus éloignés
@@ -1448,7 +1450,7 @@ cv.addEventListener("pointermove", e => {
   if (Math.hypot(p.x-gesture.start.x, p.y-gesture.start.y) > 6) gesture.moved = true;
   if (gesture.type === "pan" && gesture.moved){ state.view.ox += p.x-gesture.last.x; state.view.oy += p.y-gesture.last.y; gesture.last = p; render(); }
   else if (gesture.type === "handle"){ state.handles[gesture.k] = toImg(p.x, p.y); render(); }
-  else if (gesture.type === "hole" && gesture.moved){ const q = toImg(p.x,p.y); state.holes[gesture.i] = {...state.holes[gesture.i], x:q.x, y:q.y, split:false}; render(); }
+  else if (gesture.type === "hole" && gesture.moved){ const q = toImg(p.x,p.y); state.holes[gesture.i] = {...state.holes[gesture.i], x:q.x, y:q.y, split:false, est:false, diff:false}; render(); }   // déplacé par l'utilisateur : plus estimé
   if (gesture.type === "pan") gesture.last = p;
 });
 function endPtr(e){
@@ -1589,7 +1591,7 @@ $("lotGo").onclick = async () => {
       setImage(c, false, i > 0);
       its[i].cal = calCopy(); its[i].doute = !getCal() || !!state.calSuspect;
       its[i].ring = state.ringRef && state.ringRef.img === state.img ? state.ringRef : null;   // anneaux bruts de cette photo
-      its[i].found = state.holes.filter(h => (h.s||0) === state.curSeries && !h.est).length;
+      its[i].found = state.holes.filter(h => (h.s||0) === state.curSeries && !h.est).length;   // estimés exclus : à vérifier
     }
   } catch(err){ $("lotProg").textContent = "Une photo est illisible : retire-la de la liste."; lot.running = false; $("lotGo").disabled = false; return; }
   $("fShots").value = fs0; lot.running = false;
@@ -1627,9 +1629,10 @@ function lotShowNav(){
   const n = lot.items.length, k = lot.k, it = lot.items[k];
   $("lotNav").hidden = false; $("lotPrev").disabled = k === 0; $("lotNext").disabled = k === n-1;
   $("lotLbl").textContent = `Série ${k+1} / ${n}`;
-  const nb = state.holes.filter(h => (h.s||0) === k).length; it.found = nb;
-  $("lotInfo").innerHTML = `${esc(it.file.name)} · ${nb} impact${nb>1?"s":""} pour ${it.coups} coup${it.coups>1?"s":""} annoncé${it.coups>1?"s":""}`
-    + (it.doute ? ` · <span class="warn">⚠ calage douteux</span>` : nb !== it.coups ? ` · <span class="warn">⚠ à vérifier</span>` : "")
+  const nb = state.holes.filter(h => (h.s||0) === k).length, ne = state.holes.filter(h => (h.s||0) === k && h.est).length;
+  it.found = nb - ne;                     // un impact estimé (pointillé) reste « à vérifier » tant qu'il n'est pas déplacé
+  $("lotInfo").innerHTML = `${esc(it.file.name)} · ${nb} impact${nb>1?"s":""}${ne ? ` dont ${ne} estimé${ne>1?"s":""}` : ""} pour ${it.coups} coup${it.coups>1?"s":""} annoncé${it.coups>1?"s":""}`
+    + (it.doute ? ` · <span class="warn">⚠ calage douteux</span>` : it.found !== it.coups ? ` · <span class="warn">⚠ à vérifier</span>` : "")
     + ` · ${lot.items.filter(x => x.found !== x.coups || x.doute).length} série(s) sur ${n} à vérifier après l'analyse`;
   $("badge").hidden = false; $("badge").textContent = `Série ${k+1}`;
   $("bNext").hidden = k !== n-1;          // une photo de plus ne s'ajoute qu'après la dernière série
@@ -1676,7 +1679,7 @@ function setImage(canvas, isSample, next){
   const ok = calibrate(), doute = ok && state.calSuspect;
   if (next && ok && !doute){ detectHoles(true); alignToPrev(); }
   const calN = getCal();
-  const old = next && state.carry && calN ? state.carry.map(c => { const p = mmToImg(calN, c.mm.x, c.mm.y); const h = {x:p.x, y:p.y, s:c.s, split:c.split}; if (c.o != null) h.o = c.o; if (c.manual) h.manual = true; return h; }) : [];
+  const old = next && state.carry && calN ? state.carry.map(c => { const p = mmToImg(calN, c.mm.x, c.mm.y); const h = {x:p.x, y:p.y, s:c.s, split:c.split}; if (c.o != null) h.o = c.o; if (c.manual) h.manual = true; if (c.est) h.est = true; if (c.diff) h.diff = true; return h; }) : [];
   // calage douteux : mieux vaut ne rien détecter que remplir la cible de faux impacts
   state.holes = old.concat(doute ? [] : diffRefine(detectHoles()).map(h => ({...h, s: state.curSeries})));
   fit(); setMode(ok && !doute ? "add" : "calib");
@@ -1722,7 +1725,10 @@ function refresh(){
   if (nEst) info += ` · ${nEst} estimé${nEst>1?"s":""}`;
   if (miss) info += miss > 0 ? ` · ${miss} non localisé${miss>1?"s":""}` : ` · ${-miss} de trop`;
   const mm_ = $("missMsg");
-  const estTxt = nEst ? `${nEst} coup${nEst>1?"s":""} tombé${nEst>1?"s":""} dans une déchirure : position estimée d'après ce qu'elle a gagné depuis la photo précédente (cercle${nEst>1?"s":""} en pointillé). Vérifie-${nEst>1?"les":"le"} sur la cible et déplace-${nEst>1?"les":"le"} si besoin. ` : "";
+  const nDif = state.holes.filter(h => (h.s||0) === state.curSeries && h.est && h.diff).length, nDec = nEst - nDif;
+  const estTxt = (nDec ? `${nDec} coup${nDec>1?"s":""} tombé${nDec>1?"s":""} dans une déchirure : position estimée d'après ce qu'elle a gagné depuis la photo précédente (cercle${nDec>1?"s":""} en pointillé). ` : "")
+    + (nDif ? `${nDif} coup${nDif>1?"s":""} placé${nDif>1?"s":""} là où la cible s'est assombrie depuis la photo précédente, sans trou net (cercle${nDif>1?"s":""} en pointillé). ` : "")
+    + (nEst ? `Vérifie-${nEst>1?"les":"le"} sur la cible et déplace-${nEst>1?"les":"le"} si besoin : un cercle déplacé devient plein. ` : "");
   mm_.className = "msg"; mm_.textContent = estTxt + (miss > 0
     ? `${miss} coup${miss>1?"s":""} sur ${nS} sans trou propre : ${miss>1?"ils sont passés":"il est passé"} dans un trou existant. ${miss>1?"Ils ne sont pas comptés":"Il n'est pas compté"} : ajoute-${miss>1?"les":"le"} à la main si tu sais où.`
     : miss < 0 ? `${-miss} impact${miss<-1?"s":""} de plus que les ${nS} coups annoncés : supprime les fausses détections.` : "");
