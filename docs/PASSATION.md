@@ -306,6 +306,28 @@ Niveau v29 : 14 sur 30 à 3 mm dans la bonne série, 19 en trop. Sept séries ne
 dérive de 2 à 3,5 mm aux photos 6 et 11 (zoom changé) et 8-9 (floues), d'où un plafond `decalageMax` de 3,5 mm propre
 à cette séance. C'est la séance la plus dure du banc : la régler sans faire reculer les quatre autres.
 
+## v30 (08/11/2026) : recalage par l'image et contrôle par la photo précédente
+
+Sur le 06/11, le recalage par les trous s'égarait de 2 à 4 mm (photos floues, zoom changé) : tous les chiffres
+imprimés devenaient de nouveaux trous, et les vrais coups étaient pris pour d'anciens trous. Le décalage entre photos
+vient désormais de l'image entière : relief (gradient de luminance) relevé tous les 0,5 mm entre 15 et 105 mm du centre,
+corrélé à celui de la photo précédente pour la rotation donnée par les anneaux (pic net exigé, sinon retour aux trous).
+Sur les cinq autres séances il tombe sous 0,1 mm (au lieu de 0,25 à 0,5 mm), mêmes points. Essai d'affinage par les
+trous à ± 0,5 mm : le banc recule (23/10 : 29 → 28 sur 30, 06/11 : 27 → 24), abandonné.
+
+Photos à la longue-vue seulement : carte de ce qui a changé depuis la photo précédente (luminance lissée sur 1,5 mm,
+corrigée de l'écart local de lumière). Mesuré sur le 06/11 : un vrai coup assombrit 20 à 63 mm² dans un disque de
+5,5 mm ; un chiffre ou un ancien trou repris à tort, au plus 22, et un chiffre flou s'éclaircit autant qu'il
+s'assombrit. Règle : un nouvel impact doit avoir assombri au moins 18 mm² et s'éclaircir de moins de 0,9 fois autant ;
+s'il manque des coups annoncés, les zones assombries les plus fortes (au moins 18 mm², à plus de 7 mm d'un impact de
+la série) deviennent des impacts, avant les positions estimées. Appliquée aux photos sur papier, elle faisait perdre
+15 coups sur 60 (11/10, 23/10) : là, un trou du visuel noir éclaircit souvent. Un apprentissage du sens zone par zone,
+sur les anciens trous, a été essayé et rejeté (06/11 : 11 sur 30).
+
+Banc après v30 : 06/11 27 sur 30, 3 en trop (14 et 19 en v29) ; 23/10 29 sur 30, 1 en trop ; 01/11 5 sur 5, 1 en trop ;
+11/10 28 sur 30, 4 en trop ; 02/10, 04/10 et DDM4 : mêmes impacts et mêmes points (149 à la jauge). Temps ajouté par
+photo sur ordinateur : environ 0,2 s.
+
 ## Pistes d'évolution
 
 L'utilisateur a dit avoir des idées d'évolution sans les avoir encore détaillées : demande-les lui avant de
