@@ -126,6 +126,17 @@ Son matériel et ses habitudes :
   (3) confirmation trou par trou ; en direct, chiffres écartés sans exception, tolérance 5 mm sur l'axe et 4,5 sur le rayon.
   Résultats : 01/11 en mode photo 5/5 et 4 en trop ; les quatre autres séances inchangées ; rejeu en direct du 01/11 :
   4 coups annoncés sur 4, 1 fausse annonce ; 45 images bougées et paire du 28/10 : 0 fausse annonce.
+- Séance longue-vue du 06/11 (30 photos, cible à 10 blanc, 25 m) et v28. Reconstitution : 25 trous, un par photo sauf
+  photos 21–23, 27, 30 ; JSON de l'utilisateur incomplet (20 coups, série 19 vide, s'arrête à la photo 20), à refaire avant
+  d'entrer au banc. Rejeu v27 (1 coup par photo utile) : 11 coups sur 25 à la bonne photo, 12 faux trous (chiffres doublés
+  par le flou, décalés de 3 à 6 mm de leur emplacement), 6 coups estimés hors du carton. Critère « noirceur seule »
+  vérifié et écarté : vrais trous 16–100 % de sombre (médiane 87 %), les deux coups tombés sur un chiffre à 16 et 41 %.
+  Retouches d'image essayées (contraste, gris, négatif) : aucune nette amélioration, le négatif fait échouer le calage.
+  v28 (saisie) : séries vides affichées, « Annuler la dernière photo », alerte photo identique ou sans trou, suppression
+  d'une série dans l'historique, numéro de série près de chaque impact, aucune estimation dans une déchirure qui touche un
+  bord. Banc inchangé. 06/11 en v28 : 9 coups sur 25 à la bonne photo, 14 faux, 3 estimés dans la cible (1 juste) ; l'écart
+  avec la v27 vient du recalage par les trous, instable sur ces photos (décalage de 3 à 4 mm aux photos 8–9). Essai
+  d'une variante sans estimation sur les images d'oculaire : rejeté, la séance DDM4 tombait (149 → 129 points), signe que ses photos sont recadrées comme prises à l'oculaire : à vérifier.
 - Rotation entre photos (v22). Mesure de référence hors de l'appli : corrélation angulaire, sur 360°, de chacun des trois
   anneaux de chiffres (9, 8, 7) entre la photo k et la photo 1 ; les trois concordent à 0,05° près sur 11 paires de photos.
   Sur le 23/10, la v21 (centre des pixels blancs des quatre « 9 ») donnait 1,44 / 0,77 / 0,73 / −0,11 / 0,70° pour

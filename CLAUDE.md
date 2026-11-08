@@ -43,8 +43,8 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v27` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v27`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v28` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v28`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,
@@ -177,6 +177,13 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
 - Ombre portée sur la zone claire (carton courbé en haut) : depuis la v21, un morceau de cordon épaissi par l'ombre,
   allongé et au contour mou, est rejeté (3 faux trous de moins le 23/10). Une ombre plus nette ou un vrai trou très
   allongé dans le clair pourraient passer du mauvais côté de la règle : elle n'est réglée que sur 5 séances.
+- Saisie des séries (v28) : une série sans impact reste affichée (« 0 coup ») et comptée dans `series` ; « Annuler la dernière
+  photo » (un seul niveau) retire la dernière photo importée par « Photo série suivante » avec sa série ; alerte si cette
+  photo est le même fichier que la précédente ou n'apporte aucun trou ; « Supprimer la série N » dans l'historique
+  renumérote les suivantes. Un coup estimé n'est plus placé dans une « déchirure » qui touche le bord de la photo ou du champ
+  de l'oculaire (06/11 : 11 coups à 12–15 cm du centre, hors du carton) ; sur cette séance il tombe alors dans une vraie
+  déchirure, au bon endroit 1 fois sur 3. Le recalage par les trous s'y décale de 3 à 4 mm sur certaines photos à
+  l'oculaire (photos 8–9) : à traiter avec la détection.
 - La rotation de la première photo n'est pas corrigée (seule la rotation entre photos d'une série l'est) :
   une photo penchée fausse la répartition horizontal/vertical, pas le score.
 
