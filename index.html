@@ -205,6 +205,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
           <button class="btn ghost" id="bPick" title="En secours : touche l'intérieur d'un trou pour chercher sa couleur"><span id="pickTxt">Trou modèle</span> <span id="hueSw" class="sw"></span></button>
           <label class="btn" for="fileNext" id="bNext" title="Photographie la même cible après la série suivante">+ Photo série suivante</label>
           <input id="fileNext" type="file" accept="image/*" hidden>
+          <button class="btn ghost" id="bPrevPhoto" hidden title="Retire la dernière photo et sa série, comme si elle n'avait pas été importée">Annuler la dernière photo</button>
           <button class="btn ghost" id="bUndo" disabled>Annuler</button>
           <button class="btn ghost" id="bClear">Tout effacer</button>
           <span class="sp"></span>
@@ -842,15 +843,18 @@ function detectHoles(rawOnly){
   //    avec la couronne de fibres arrachées, jusqu'à 1,2 calibre.
   const aLo = Math.PI*(0.25*cal_mm*pm)**2, aHi = Math.PI*(0.6*cal_mm*pm)**2, minA = 0.45*aLo;
   const edgeMin = Math.max(10, 0.3*gradRef.T), rejected = {bord:0, flou:0, taille:0, chiffre:0, ombre:0};
+  // touche le bord de la photo (marge de 4 mm : porte-cible, main, ombre) ou, sur une image recadrée sur le champ
+  // d'une longue-vue (lvCrop), le bord du champ (3 mm)
+  const touchesEdge = cp => { const mg = Math.round(4*pm);
+    if (cp.minx + x0 <= mg || cp.miny + y0 <= mg || cp.maxx + x0 >= W-1-mg || cp.maxy + y0 >= H-1-mg) return true;
+    if (!img.field) return false;
+    const F = img.field, NA = F.r ? F.r.length : 0, m3 = 3*cal.pxmm;
+    return cp.px.some(k => { const X = (k%bw + x0 + 0.5)/s - F.cx, Y = (((k/bw)|0) + y0 + 0.5)/s - F.cy;
+      const rl = NA ? F.r[Math.round(((Math.atan2(Y, X) + 2*Math.PI) % (2*Math.PI)) / (2*Math.PI) * NA) % NA] : F.R;
+      return Math.hypot(X, Y) > rl - m3; }); };
   let blobs = comps.filter(cp => {
     if (cp.area < minA){ return false; }
-    const mg = Math.round(4*pm);   // marge de 4 mm : bord de photo, baguette du porte-cible
-    if (cp.minx + x0 <= mg || cp.miny + y0 <= mg || cp.maxx + x0 >= W-1-mg || cp.maxy + y0 >= H-1-mg){ rejected.bord++; return false; }   // touche le bord de la photo : porte-cible, main, ombre
-    // image recadrée sur le champ d'une longue-vue (lvCrop) : le bord du champ compte comme le bord de la photo (3 mm)
-    if (img.field){ const F = img.field, NA = F.r ? F.r.length : 0, m3 = 3*cal.pxmm;
-      if (cp.px.some(k => { const X = (k%bw + x0 + 0.5)/s - F.cx, Y = (((k/bw)|0) + y0 + 0.5)/s - F.cy;
-          const rl = NA ? F.r[Math.round(((Math.atan2(Y, X) + 2*Math.PI) % (2*Math.PI)) / (2*Math.PI) * NA) % NA] : F.R;
-          return Math.hypot(X, Y) > rl - m3; })){ rejected.bord++; return false; } }
+    if (touchesEdge(cp)){ rejected.bord++; return false; }
     if (cp.area > 90*aHi){ rejected.taille++; return false; }
     // chiffres imprimés (1 à 9, sur les axes horizontal et vertical, au milieu de chaque zone) : un fragment de chiffre
     // peut survivre au nettoyage. Un vrai trou posé sur un chiffre est plus large et plus grand que ce fragment.
@@ -933,6 +937,9 @@ function detectHoles(rawOnly){
     const placed = holes.map(h => ({h, x:(h.x*s - x0 - 0.5), y:(h.y*s - y0 - 0.5)}));
     const tears = [];
     for (const c of fc){
+      // v28 : une « déchirure » qui touche le bord de la photo ou du champ de l'oculaire n'en est pas une. Le 06/11, faute
+      // de trou nouveau, 11 coups annoncés partaient sur le bord du champ, à 12–15 cm du centre, hors du carton.
+      if (touchesEdge(c)) continue;
       const now = new Set(), old = new Set(); let sx=0, sy=0;
       for (const k of c.px){ const ce = cellOf[k]; if (ce < 0) continue; now.add(ce); if (pg[ce]) old.add(ce); sx += UX[k]; sy += UY[k]; }
       const r = Math.hypot(sx/c.area, sy/c.area), a1mm = (r > R_BLACK || (r < ZONE_W && gradRef.tenWhite) ? a1L : a1D)/(pm*pm);
@@ -1219,9 +1226,12 @@ function render(){
   // repères en espace écran
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.font = "600 11px 'IBM Plex Mono', monospace"; ctx.textAlign="center"; ctx.textBaseline="middle";
+  // v28 : en mode séries, le numéro de série suit celui de l'impact (« 12·s5 ») : les 8 couleurs reviennent dès la série 9
+  const multi = state.holes.some(h => (h.s||0) > 0);
   state.holes.forEach((h,i) => { const p = toScreen(h), rr = Math.max(7, cal_mm/2*cal.pxmm*v.s);
-    ctx.fillStyle="rgba(0,0,0,.65)"; ctx.fillRect(p.x+rr+1, p.y-rr-8, 18, 14);
-    ctx.fillStyle=serColor(h.s); ctx.fillText(String(i+1), p.x+rr+10, p.y-rr-1); });
+    const txt = multi ? `${i+1}·s${(h.s||0)+1}` : String(i+1), w = Math.max(18, ctx.measureText(txt).width + 6);
+    ctx.fillStyle="rgba(0,0,0,.65)"; ctx.fillRect(p.x+rr+1, p.y-rr-8, w, 14);
+    ctx.fillStyle=serColor(h.s); ctx.fillText(txt, p.x+rr+1+w/2, p.y-rr-1); });
   if (st.n >= 1){ const p = toScreen(mmToImg(cal, st.mx, st.my));
     ctx.strokeStyle=acc; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(p.x-10,p.y); ctx.lineTo(p.x+10,p.y); ctx.moveTo(p.x,p.y-10); ctx.lineTo(p.x,p.y+10); ctx.stroke(); }
   const c0 = toScreen({x:cal.cx, y:cal.cy});
@@ -1329,6 +1339,7 @@ $("bAutoCal").onclick = () => { pushUndo(); const ok = calibrate(); if (!ok || s
 
 function loadFile(file, next){
   if (!file) return;
+  lastFileSig = fileSig(file);
   const url = URL.createObjectURL(file), im = new Image();
   im.onload = () => {
     const MAXS = 2600, s = Math.min(1, MAXS/Math.max(im.naturalWidth, im.naturalHeight));
@@ -1342,10 +1353,31 @@ function loadFile(file, next){
   im.onerror = () => { $("hint").innerHTML = "<b>Image illisible.</b> Essaie un JPEG ou un PNG."; };
   im.src = url;
 }
+// « Annuler la dernière photo » (v28) : avant chaque « Photo série suivante », l'état de l'onglet est copié (photo,
+// impacts, calage, mémoire « déjà troué ») ; le bouton le remet, et la série ajoutée disparaît avec sa photo. Le 06/11,
+// une même photo importée deux fois avait laissé une série vide qu'on ne pouvait plus retirer. Un seul niveau : chaque
+// copie garde une image de plusieurs Mo.
+let photoSnap = null, lastFileSig = null, nextFromFile = null;
+const fileSig = f => f ? `${f.name}|${f.size}|${f.lastModified}` : null;
+function snapPhoto(){ return Object.assign({}, state, {view: {...state.view}, undo: [], holes: state.holes.map(h => ({...h})),
+  handles: state.handles ? JSON.parse(JSON.stringify(state.handles)) : state.handles, persp: state.persp ? state.persp.slice() : state.persp,
+  inkGrid: state.inkGrid ? state.inkGrid.slice() : state.inkGrid, fileSig: lastFileSig}); }
+function restorePhoto(){
+  if (!photoSnap) return;
+  const snap = photoSnap, n = (state.curSeries||0) + 1; photoSnap = null;
+  Object.keys(state).forEach(k => { if (!(k in snap)) delete state[k]; }); Object.assign(state, snap);
+  lastFileSig = snap.fileSig; delete state.fileSig; $("bUndo").disabled = true; $("bPrevPhoto").hidden = true;
+  $("badge").hidden = !state.sample && !state.curSeries; $("badge").textContent = `Série ${(state.curSeries||0)+1}`;
+  fit(); setMode("add"); refresh();
+  $("hint").innerHTML = `<b>Dernière photo retirée</b> : la série ${n} et ses impacts sont supprimés. La photo précédente est revenue.`;
+}
+$("bPrevPhoto").onclick = restorePhoto;
 $("fileCam").onchange = e => { loadFile(e.target.files[0]); e.target.value=""; };
 $("fileGal").onchange = e => { loadFile(e.target.files[0]); e.target.value=""; };
 $("fileNext").onchange = e => { const f = e.target.files[0]; e.target.value=""; if (!f) return;
-  if (!prepareNextSeries()){ loadFile(f); return; } loadFile(f, true); };
+  const snap = snapPhoto(), meme = !!lastFileSig && fileSig(f) === lastFileSig;
+  if (!prepareNextSeries()){ loadFile(f); return; }
+  photoSnap = snap; nextFromFile = {meme}; loadFile(f, true); };
 stage.addEventListener("dragover", e => e.preventDefault());
 stage.addEventListener("drop", e => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); });
 
@@ -1363,17 +1395,27 @@ function setImage(canvas, isSample, next){
   fit(); setMode(ok && !doute ? "add" : "calib");
   if (!ok) $("hint").innerHTML = "<b>Visuel noir non trouvé automatiquement.</b> " + HINTS.calib;
   if (doute) $("hint").innerHTML = CAL_DOUTE + "Aucun impact n'a été détecté. " + HINTS.calib + " Puis touche « Détecter les impacts ».";
+  // photo importée par « Photo série suivante » : bouton pour la retirer, et alerte si elle n'apporte rien de nouveau
+  if (!next || !nextFromFile){ if (!next) photoSnap = null; nextFromFile = null; }
+  $("bPrevPhoto").hidden = !photoSnap;
+  if (next && nextFromFile){ const {meme} = nextFromFile; nextFromFile = null;
+    const nouv = state.holes.filter(h => (h.s||0) === state.curSeries && !h.est).length, nS = state.curSeries + 1;
+    if (meme) $("hint").innerHTML = `<b>Même fichier que la photo précédente.</b> Si tu l'as importé deux fois par erreur, touche « Annuler la dernière photo » : la série ${nS} disparaîtra avec elle.`;
+    else if (ok && !doute && !nouv) $("hint").innerHTML = `<b>Aucun nouveau trou sur cette photo (série ${nS}).</b> Si c'est une photo en double, touche « Annuler la dernière photo ». Sinon, place les impacts à la main.`;
+  }
   refresh();
 }
 
 // ---------- panneau résultats ----------
-function renderSeries(shots, sers, cal_mm, dist, card, body, msgEl){
-  const ks = [...new Set(sers)].sort((a,b)=>a-b);
+// nSer (v28) : nombre de séries de la séance. Une série sans impact (photo importée deux fois, impacts supprimés) reste
+// affichée avec 0 coup : avant, elle disparaissait du tableau et laissait un trou dans la numérotation (06/11, série 19).
+function renderSeries(shots, sers, cal_mm, dist, card, body, msgEl, nSer){
+  const ks = [...new Set([...sers, ...Array.from({length: Math.max(0, nSer||0)}, (_, i) => i)])].sort((a,b)=>a-b);
   if (ks.length < 2){ card.hidden = true; return; }
   card.hidden = false;
   const rows = ks.map(k => { const sh = shots.filter((p,i)=>sers[i]===k); return {k, st: computeStats(sh, cal_mm, dist)}; });
-  body.innerHTML = rows.map(({k,st}) => `<tr><td><span class="sw" style="background:${serColor(k)}"></span> ${k+1}</td><td>${st.n}</td><td>${st.total}</td><td>${st.n?fmt(st.avg,2):"–"}</td><td>${fmt(st.sdr,1)}</td><td>${sgn(st.mx,0)}</td><td>${sgn(st.my,0)}</td></tr>`).join("");
-  const f = rows[0].st, l = rows[rows.length-1].st;
+  body.innerHTML = rows.map(({k,st}) => !st.n ? `<tr><td><span class="sw" style="background:${serColor(k)}"></span> ${k+1}</td><td>0</td><td colspan="5" class="muted">aucun impact</td></tr>` : `<tr><td><span class="sw" style="background:${serColor(k)}"></span> ${k+1}</td><td>${st.n}</td><td>${st.total}</td><td>${st.n?fmt(st.avg,2):"–"}</td><td>${fmt(st.sdr,1)}</td><td>${sgn(st.mx,0)}</td><td>${sgn(st.my,0)}</td></tr>`).join("");
+  const pleins = rows.filter(r => r.st.n), f = (pleins[0] || rows[0]).st, l = (pleins[pleins.length-1] || rows[0]).st;
   if (msgEl && f.n && l.n){
     const d = l.avg - f.avg;
     msgEl.className = "msg"; msgEl.textContent = Math.abs(d) < 0.25 ? `Niveau stable entre la 1re et la dernière série (${fmt(f.avg,2)} → ${fmt(l.avg,2)} pts/coup).`
@@ -1456,7 +1498,7 @@ function refresh(){
   $("addSerWrap").hidden = ns < 2;
   if (sel.options.length !== ns){ sel.innerHTML = Array.from({length:ns}, (_,k) => `<option value="${k}">série ${k+1}</option>`).join(""); sel.value = cur !== "" && +cur < ns ? cur : String(state.curSeries); }
   $("bSave").disabled = st.n === 0;
-  renderSeries(shots, state.holes.map(h=>h.s||0), cal_mm, dist, $("serCard"), $("serBody"), $("serMsg"));
+  renderSeries(shots, state.holes.map(h=>h.s||0), cal_mm, dist, $("serCard"), $("serBody"), $("serMsg"), state.sample ? 0 : (state.curSeries||0) + 1);
 }
 $("shotBody").addEventListener("click", e => {
   const td = e.target.closest("td.pt"); if (!td) return;
@@ -1579,7 +1621,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v27");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v28");
     renderHistory();
   }
 }
@@ -1592,7 +1634,8 @@ async function saveSession(){
     arme: $("fArme").value.trim() || "Sans nom", calibre: calLabel, caliberMm: cal_mm, distanceM: dist,
     clickVal: +$("fClick").value || null, clickUnit: $("fUnit").value, note: $("fNote").value.trim(),
     mun: $("fMun").value.trim(), pos: $("fPos").value, v0: +$("fV0").value || null, vsd: +$("fVsd").value || null,
-    series: state.holes.reduce((m,h)=>Math.max(m,(h.s||0)+1), 1),
+    // v28 : une dernière série sans impact compte aussi, pour que le tableau des séries reste juste
+    series: state.holes.reduce((m,h)=>Math.max(m,(h.s||0)+1), state.sample ? 1 : (state.curSeries||0) + 1),
     ...(curTireur > 0 ? {tireur: tireurs[curTireur].nom} : {}),
     shots: shots.map((p,i) => { const h = state.holes[i], a = [Math.round(p.x*10)/10, Math.round(p.y*10)/10, h.s||0]; if (h.o != null) a.push(h.o); return a; })
   };
@@ -1614,7 +1657,7 @@ async function saveSession(){
 $("bSave").onclick = saveSession;
 
 function sessionStats(s){ const st = computeStats(toPts(s.shots), s.caliberMm, s.distanceM); st.s = s; return st; }
-let selectedId = null, confirmDel = false, editInfo = false;
+let selectedId = null, confirmDel = false, editInfo = false, delSerie = null;   // delSerie : série dont on confirme la suppression
 function fillSelect(el, values, label){
   const cur = el.value; el.innerHTML = `<option value="">${label}</option>` + values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
   if (values.map(String).includes(cur)) el.value = cur;
@@ -1652,7 +1695,7 @@ function renderHistory(){
   $("histBody").innerHTML = list.slice().reverse().map(st => { const s = st.s;
     return `<tr data-id="${esc(s.id)}" aria-selected="${s.id===selectedId}"><td>${fmtDate(s.date)}</td><td>${plusieurs && !$("hTireur").value ? `<b>${esc(tireurOf(s))}</b> · ` : ""}${esc(s.arme)}</td><td>${esc(s.mun||"–")}</td><td>${s.distanceM} m</td><td>${st.n}</td><td>${st.total}</td><td>${st.n?fmt(st.avg,2):"–"}</td><td>${fmt(st.sdx,1)}</td><td>${fmt(st.sdy,1)}</td><td>${fmt(st.sdr,1)}</td><td>${fmt(st.toMoa(st.sdr),2)}</td><td>${fmt(st.off,1)}</td><td>${(()=>{const f=analyzeFliers(toPts(s.shots), s.caliberMm, s.distanceM, $("fHand").value); return f?f.fliers.length:"–";})()}</td></tr>`;
   }).join("") || `<tr><td colspan="13" class="empty" style="font-family:var(--body)">Aucune séance enregistrée pour ce filtre. Analyse une cible puis « Enregistrer dans l'historique ».</td></tr>`;
-  document.querySelectorAll("#histBody tr[data-id]").forEach(tr => tr.onclick = () => { selectedId = selectedId===tr.dataset.id ? null : tr.dataset.id; confirmDel=false; editInfo=false; renderHistory(); });
+  document.querySelectorAll("#histBody tr[data-id]").forEach(tr => tr.onclick = () => { selectedId = selectedId===tr.dataset.id ? null : tr.dataset.id; confirmDel=false; delSerie=null; editInfo=false; renderHistory(); });
   renderDetail();
 }
 // comparaison des munitions : écart-type radial mis en commun, en MOA pour mélanger les distances
@@ -1794,7 +1837,10 @@ function renderDetail(){
     ${[["PMI H",st.mx,1],["PMI V",st.my,1],["Écart-type H",st.sdx],["Écart-type V",st.sdy],["Écart-type radial",st.sdr],["Groupement",st.es]].map(([l,v,sg])=>{const f=sg?sgn:fmt;return `<tr><td>${l}</td><td>${f(v,1)}</td><td>${f(st.toMoa(v),2)}</td><td>${f(st.toMrad(v),2)}</td></tr>`;}).join("")}
     </tbody></table>
     ${st.sdrCI?`<p class="note">Fourchette 95 % de l'écart-type radial : ${fmt(st.sdrCI[0],1)}–${fmt(st.sdrCI[1],1)} mm.</p>`:""}
-    <div id="dSer" hidden style="margin-top:10px"><table class="disp"><thead><tr><th>Série</th><th>Coups</th><th>Pts</th><th>Moy.</th><th><i class="sg">σ</i>R mm</th><th>PMI x</th><th>PMI y</th></tr></thead><tbody id="dSerBody"></tbody></table><div class="msg" id="dSerMsg"></div></div>
+    <div id="dSer" hidden style="margin-top:10px"><table class="disp"><thead><tr><th>Série</th><th>Coups</th><th>Pts</th><th>Moy.</th><th><i class="sg">σ</i>R mm</th><th>PMI x</th><th>PMI y</th></tr></thead><tbody id="dSerBody"></tbody></table><div class="msg" id="dSerMsg"></div>
+      ${(s.series||1) > 1 ? `<div class="row" style="margin-top:8px">${delSerie != null
+        ? `<span>Supprimer la série ${delSerie+1} (${s.shots.filter(p=>(p[2]||0)===delSerie).length} impact${s.shots.filter(p=>(p[2]||0)===delSerie).length>1?"s":""}) ? Les suivantes seront renumérotées.</span><button class="btn danger" id="bSerYes">Supprimer</button><button class="btn ghost" id="bSerNo">Garder</button>`
+        : `<select id="dSerSel" aria-label="Série à supprimer">${Array.from({length: s.series}, (_, k) => `<option value="${k}">Série ${k+1}</option>`).join("")}</select><button class="btn ghost" id="bSerDel">Supprimer cette série</button>`}</div><div class="msg" id="dSerDelMsg"></div>` : ""}</div>
     ${editInfo ? `<div class="fields" style="margin-top:12px">
       <div class="field full"><label for="eTir">Tireur</label><select id="eTir">${[...new Set([...tireurs.map(t=>t.nom), tireurOf(s)])].map(v=>`<option${v===tireurOf(s)?" selected":""}>${esc(v)}</option>`).join("")}</select></div>
       <div class="field full"><label for="eMun">Munition ou recette</label><input id="eMun" list="munList" value="${esc(s.mun||"")}"></div>
@@ -1808,7 +1854,7 @@ function renderDetail(){
       ? `<span>Supprimer définitivement cette séance ?</span><button class="btn danger" id="bDelYes">Supprimer</button><button class="btn ghost" id="bDelNo">Garder</button>`
       : `<button class="btn danger" id="bDel">Supprimer la séance</button>`}</div>
   </div></div>`;
-  renderSeries(toPts(s.shots), s.shots.map(p=>p[2]||0), s.caliberMm, s.distanceM, $("dSer"), $("dSerBody"), $("dSerMsg"));
+  renderSeries(toPts(s.shots), s.shots.map(p=>p[2]||0), s.caliberMm, s.distanceM, $("dSer"), $("dSerBody"), $("dSerMsg"), s.series);
   // munition, position, chronographe et note restent modifiables après l'enregistrement : une faute de saisie ne
   // demande pas de refaire la détection. Calibre, distance et impacts ne changent pas (ils fixent points et MOA).
   if ($("bInfo")) $("bInfo").onclick = () => { editInfo = true; confirmDel = false; renderDetail(); };
@@ -1822,7 +1868,21 @@ function renderDetail(){
       editInfo = false; renderHistory();
     } catch(e){ const m = $("infoMsg"); if (m){ m.className = "msg err full"; m.textContent = "Échec de l'enregistrement des modifications. Réessaie."; } }
   };
-  if ($("bDel")) $("bDel").onclick = () => { confirmDel = true; renderDetail(); };
+  // Supprimer une série (v28) : ses impacts partent, les séries suivantes reculent d'un numéro. Le format ne change pas
+  // (shots [x, y, série, points?], series = nombre de séries). Sert surtout à retirer une série vide ou en double.
+  if ($("bSerDel")) $("bSerDel").onclick = () => { delSerie = +$("dSerSel").value; confirmDel = false; renderDetail(); };
+  if ($("bSerNo")) $("bSerNo").onclick = () => { delSerie = null; renderDetail(); };
+  if ($("bSerYes")) $("bSerYes").onclick = async () => {
+    const k = delSerie, shots = s.shots.filter(p => (p[2]||0) !== k).map(p => { const q = p.slice(); if ((q[2]||0) > k) q[2]--; return q; });
+    const upd = {shots, series: Math.max(1, (s.series||1) - 1)};
+    if (!shots.length){ delSerie = null; renderDetail(); const m = $("dSerDelMsg"); m.className = "msg err"; m.textContent = "C'est la seule série avec des impacts : supprime plutôt la séance."; return; }
+    try {
+      if (store.kind === "db"){ const doc = {...s, ...upd}; delete doc.id; await store.db.collection("seances").doc(s.id).set(doc); }
+      else { Object.assign(s, upd); ls.set("c50_seances", store.sessions); }
+      delSerie = null; renderHistory();
+    } catch(e){ delSerie = null; renderDetail(); const m = $("dSerDelMsg"); if (m){ m.className = "msg err"; m.textContent = "Échec de la suppression. Réessaie."; } }
+  };
+  if ($("bDel")) $("bDel").onclick = () => { confirmDel = true; delSerie = null; renderDetail(); };
   if ($("bDelNo")) $("bDelNo").onclick = () => { confirmDel = false; renderDetail(); };
   if ($("bDelYes")) $("bDelYes").onclick = async () => {
     try {
