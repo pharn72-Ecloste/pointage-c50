@@ -30,7 +30,7 @@ pas à pas, sans jargon, et propose toujours le chemin le plus simple.
 | `sw.js` | Service worker : cache pour le fonctionnement hors ligne. |
 | `manifest.webmanifest`, `icon-*.png`, `apple-touch-icon.png` | Installation comme appli (PWA). |
 | `tests/detection.test.cjs` | Test de non-régression de la détection. |
-| `tests/photos/` | Séances réelles : 02/10/2026 (9 mm, 10 m, 3 photos), 04/10/2026 (9 mm, 25 m, 2 photos, plus deux recadrages pour le calage), DDM4 .300 BLK (25 m, 3 photos de 5 coups ; la série 1 porte les annotations au pied à coulisse de l'utilisateur), 11/10/2026 (9 mm, 25 m, 5 photos : 10 + 5 + 5 + 5 + 5 coups), 23/10/2026 (P320 X-Carry, 9 mm, 15 m, fond bleu, 6 photos de 5 coups), 01/11/2026 (9 mm, 25 m, photos prises à l'oculaire d'une longue-vue, cible à 10 noir, 5 photos d'un coup). |
+| `tests/photos/` | Séances réelles : 02/10/2026 (9 mm, 10 m, 3 photos), 04/10/2026 (9 mm, 25 m, 2 photos, plus deux recadrages pour le calage), DDM4 .300 BLK (25 m, 3 photos de 5 coups ; la série 1 porte les annotations au pied à coulisse de l'utilisateur), 11/10/2026 (9 mm, 25 m, 5 photos : 10 + 5 + 5 + 5 + 5 coups), 23/10/2026 (P320 X-Carry, 9 mm, 15 m, fond bleu, 6 photos de 5 coups), 01/11/2026 (9 mm, 25 m, photos prises à l'oculaire d'une longue-vue, cible à 10 noir, 5 photos d'un coup), 06/11/2026 (9 mm, 25 m, images de la caméra en mode Longue-Vue ramenées à 2600 px, cible à 10 blanc, 30 photos d'un coup). |
 | `tests/attendu*.json` | Résultats de référence, vérifiés sur l'image et contre le comptage de l'utilisateur. |
 | `tests/verite-*.json` | Vérité terrain : positions de l'utilisateur après correction, tirées de sa sauvegarde `.json`. Base du banc d'essai. |
 | `docs/PASSATION.md` | Historique, mesures au pied à coulisse, décisions et pistes. |
@@ -127,7 +127,7 @@ jauge (149), dont 5 coups placés dans des déchirures ; et le calage sur deux r
 corrigées par l'utilisateur (`tests/verite-2026-10-11.json`) : coups retrouvés à 3 mm dans la bonne série, et
 impacts en trop. Niveau de la v14 : 28 sur 30, 4 en trop. Même banc pour la séance du 23/10/2026
 (`tests/verite-2026-10-23.json`) : 28 sur 30, 2 en trop depuis la v22. Et pour le 01/11/2026 (`tests/verite-2026-11-01.json`,
-photos à l'oculaire) : 5 sur 5, 4 en trop depuis la v27 (4 sur 5 et 15 en trop en v26). Le test vérifie aussi chaque rotation entre
+photos à l'oculaire) : 5 sur 5, 4 en trop depuis la v27 (4 sur 5 et 15 en trop en v26). Et pour le 06/11/2026 (`tests/verite-2026-11-06.json`, 30 photos en mode Longue-Vue, saisie avec l'import par lot) : 14 sur 30, 19 en trop en v29 ; le recalage y dérive jusqu'à 3,5 mm (plafond `decalageMax`, au lieu de 1,5 mm ailleurs), et le coup de la série 21, passé dans un trou existant, est introuvable. Le test vérifie aussi chaque rotation entre
 photos à 0,2° près contre une référence (`rotRef`) mesurée hors de l'appli sur les trois anneaux de chiffres. Attention :
 la vérité terrain hérite du recalage de l'appli du téléphone pour les coups non déplacés, elle ne juge pas la rotation. Le plancher échoue si l'on recule ; quand une
 amélioration le dépasse, relève-le. Chaque nouvelle séance avec photos et sauvegarde `.json` s'ajoute de la
