@@ -293,6 +293,19 @@ trous ratés, sous 10 sur le carton noir intact (sous 8 dans 99,9 % des pixels).
 dans le noir » : série 2 parfaite, mais un faux impact sur un chiffre « 8 », un trou du groupe perdu et le trou de
 la série 3 toujours raté, soit 26 sur 30. Non retenu. Piste pratique sans code : un fond clair derrière la cible.
 
+## La séance du 06/11/2026 (9 mm, 25 m, mode Longue-Vue) : au banc depuis le 08/11
+
+Trente images de la caméra en mode Longue-Vue (2160 × 3840, ramenées à 2600 px comme le fait l'appli), cible à 10 blanc,
+un coup par photo. Vérité terrain : sauvegarde de l'utilisateur refaite avec l'import par lot (v29). Comparée aux photos
+recalées entre elles : 29 coups laissent une trace nouvelle à la position notée. Le coup de la série 21 est noté dans le
+trou de la série 19 (0,5 mm) sans aucune trace nouvelle : aucune méthode sur photo ne le retrouvera. Une première
+reconstitution (« 25 trous », 08/11) avait manqué les coups des photos 22, 23, 27 et 30, tombés dans ou contre une
+déchirure existante. L'utilisateur signale que les photos où la détection peine sont fortement floues.
+
+Niveau v29 : 14 sur 30 à 3 mm dans la bonne série, 19 en trop. Sept séries ne donnent rien ; le recalage par les trous
+dérive de 2 à 3,5 mm aux photos 6 et 11 (zoom changé) et 8-9 (floues), d'où un plafond `decalageMax` de 3,5 mm propre
+à cette séance. C'est la séance la plus dure du banc : la régler sans faire reculer les quatre autres.
+
 ## Pistes d'évolution
 
 L'utilisateur a dit avoir des idées d'évolution sans les avoir encore détaillées : demande-les lui avant de
