@@ -1026,7 +1026,7 @@ const SERIES_C = ["#22D3EE","#FACC15","#F472B6","#A3E635","#FB923C","#E5E7EB","#
 const serColor = s => SERIES_C[(s||0) % SERIES_C.length];
 function detectAndMerge(){
   const old = state.holes.filter(h => (h.s||0) < state.curSeries);
-  return old.concat(detectHoles().map(h => ({...h, s: state.curSeries})));
+  return old.concat(diffRefine(detectHoles()).map(h => ({...h, s: state.curSeries})));
 }
 function prepareNextSeries(){
   const cal = getCal(); if (!cal || !state.img) return false;
@@ -1045,7 +1045,8 @@ function prepareNextSeries(){
   const pts = []; let tot = 0; for (let i=0;i<grid.length;i++) if (grid[i]) tot++;
   const stride = Math.max(1, Math.floor(tot/3000)); let k = 0;
   for (let i=0;i<grid.length;i++) if (grid[i] && (k++ % stride === 0)) pts.push([(i%G + 0.5)*GRID_C - 260, (Math.floor(i/G) + 0.5)*GRID_C - 260]);
-  state.prevGrid = grid; state.prevPts = pts;
+  state.prevGrid = grid; state.prevPts = pts; state.prevTex = TEX_ALIGN ? texPoints(texGrad(cal, 105)) : null;
+  state.prevLum = TEX_ALIGN ? lumRaster(cal, 110) : null;
   state.carry = state.holes.map(h => ({mm: imgToMm(cal, h.x, h.y), s: h.s||0, split: h.split, o: h.o, manual: h.manual}));
   state.curSeries = state.holes.reduce((m,h)=>Math.max(m, h.s||0), state.curSeries) + 1;
   return true;
@@ -1110,6 +1111,144 @@ function ringRotation(A, B){
   const cm = ncc(best[1]-1), cp = ncc(best[1]+1), den = cm - 2*best[0] + cp, off = den < 0 ? (cm - cp)/(2*den) : 0;
   return {deg: (best[1] + off)*360/RING_NA, corr: best[0]};
 }
+// Recalage par l'image (v30) : relief (gradient de luminance) de la cible, relevé tous les 0,5 mm dans le repère du
+// calage (x à droite, y vers le bas, comme les trous) entre 15 et 105 mm du centre : cordons, chiffres, bords des trous.
+// Le décalage qui superpose au mieux celui de la photo précédente remplace, quand la rotation vient des anneaux, celui
+// que donnaient les trous seuls : sur le 06/11 (zoom changé, photos floues), ces derniers s'égaraient de 2 à 4 mm et
+// tous les chiffres imprimés devenaient de « nouveaux trous ».
+const TEX_STEP = 0.5; let TEX_ALIGN = !window.__noTex;
+function lumRaster(cal, half){
+  const img = state.img; if (!cal || !img) return null;
+  const n = Math.round(2*half/TEX_STEP) + 1, v = new Float32Array(n*n).fill(NaN);
+  const cs = [[-half,-half],[half,-half],[-half,half],[half,half]].map(([x,y]) => mmToImg(cal, x, -y));
+  const bx0 = Math.max(0, Math.floor(Math.min(...cs.map(p=>p.x)))), by0 = Math.max(0, Math.floor(Math.min(...cs.map(p=>p.y))));
+  const bx1 = Math.min(img.width-1, Math.ceil(Math.max(...cs.map(p=>p.x)))), by1 = Math.min(img.height-1, Math.ceil(Math.max(...cs.map(p=>p.y))));
+  if (bx1-bx0 < 10 || by1-by0 < 10) return null;
+  const bw = bx1-bx0+1, bh = by1-by0+1, d = img.getContext("2d", {willReadFrequently:true}).getImageData(bx0, by0, bw, bh).data;
+  const fld = state.img.field;          // champ de l'oculaire : hors du cercle, rien n'est relevé
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){
+    const p = mmToImg(cal, -half + i*TEX_STEP, half - j*TEX_STEP), xi = Math.round(p.x) - bx0, yi = Math.round(p.y) - by0;
+    if (xi < 0 || yi < 0 || xi >= bw || yi >= bh) continue;
+    if (fld && Math.hypot(p.x - fld.cx, p.y - fld.cy) > fld.R*0.97) continue;
+    const k = (yi*bw + xi)*4; v[j*n + i] = d[k]*0.3 + d[k+1]*0.59 + d[k+2]*0.11; }
+  return {n, half, v};
+}
+function texGrad(cal, half){
+  const L = lumRaster(cal, half); if (!L) return null; const {n, v} = L;
+  const g = new Float32Array(n*n).fill(NaN);
+  for (let j = 1; j < n-1; j++) for (let i = 1; i < n-1; i++){ const o = j*n + i;
+    const gx = v[o+1] - v[o-1], gy = v[o+n] - v[o-n]; if (gx === gx && gy === gy) g[o] = Math.hypot(gx, gy); }
+  return {n, half, g};
+}
+// points du relief de la photo précédente : [x, y, poids centré], dans l'anneau 15–105 mm
+function texPoints(T){
+  if (!T) return null; const pts = [];
+  for (let j = 0; j < T.n; j++) for (let i = 0; i < T.n; i++){ const v = T.g[j*T.n + i]; if (v !== v) continue;
+    const x = -T.half + i*TEX_STEP, y = -T.half + j*TEX_STEP, r = Math.hypot(x, y); if (r < 15 || r > 105) continue; pts.push(x, y, v); }
+  if (pts.length < 3*20000) return null;
+  let m = 0; for (let k = 2; k < pts.length; k += 3) m += pts[k]; m /= pts.length/3;
+  for (let k = 2; k < pts.length; k += 3) pts[k] -= m;
+  return new Float32Array(pts);
+}
+// meilleur décalage (mm, repère des trous) pour une rotation th donnée ; null si le pic n'est pas net
+function texShift(P, C, th){
+  if (!P || !C) return null;
+  const co = Math.cos(th), sn = Math.sin(th), n = C.n, h = C.half, inv = 1/TEX_STEP;
+  const score = (tx, ty, pas = 3) => { let s = 0;
+    for (let k = 0; k < P.length; k += pas){ const x = P[k], y = P[k+1];
+      const i = Math.round((co*x - sn*y + tx + h)*inv), j = Math.round((sn*x + co*y + ty + h)*inv);
+      if (i < 0 || j < 0 || i >= n || j >= n) continue; const g = C.g[j*n + i]; if (g === g) s += P[k+2]*g; }
+    return s; };
+  const R = 4, S = [], m = Math.round(2*R*inv) + 1; let best = [-Infinity, 0, 0];
+  // recherche grossière sur un point sur cinq (temps divisé par cinq sur téléphone), puis tous les points autour du pic
+  for (let b = 0; b < m; b++) for (let a = 0; a < m; a++){ const v = score(-R + a*TEX_STEP, -R + b*TEX_STEP, 15); S.push(v); if (v > best[0]) best = [v, a, b]; }
+  const [, a0, b0] = best; if (!(best[0] > 0) || a0 === 0 || b0 === 0 || a0 === m-1 || b0 === m-1) return null;
+  // netteté : le pic doit dominer nettement la valeur moyenne de la zone de recherche
+  const mean = S.reduce((s, v) => s + v, 0)/S.length; if (best[0] < mean*1.25) return null;
+  const F = {}, at = (a, b) => F[a + "," + b] ?? (F[a + "," + b] = score(-R + a*TEX_STEP, -R + b*TEX_STEP)), v0 = at(a0, b0);
+  const sub = (l, c, r) => { const den = l - 2*c + r; return den < 0 ? Math.max(-0.5, Math.min(0.5, (l - r)/(2*den))) : 0; };
+  const dx = sub(at(a0-1, b0), v0, at(a0+1, b0)), dy = sub(at(a0, b0-1), v0, at(a0, b0+1));
+  return {tx: -R + (a0 + dx)*TEX_STEP, ty: -R + (b0 + dy)*TEX_STEP, pic: +(best[0]/mean).toFixed(2)};
+}
+// Ce qui a changé depuis la photo précédente (v30) : luminance des deux photos, recalées, relevée tous les 0,5 mm,
+// lissée sur 1,5 mm ; assombrissement corrigé de l'écart local de lumière (médiane par carrés de 10 mm).
+function boxBlur(v, n){ const o = new Float32Array(n*n).fill(NaN);
+  for (let j = 1; j < n-1; j++) for (let i = 1; i < n-1; i++){ let s = 0, c = 0;
+    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++){ const x = v[(j+b)*n + i + a]; if (x === x){ s += x; c++; } }
+    if (c >= 6) o[j*n + i] = s/c; }
+  return o; }
+function diffMap(){
+  const P = state.prevLum, C = lumRaster(getCal(), 110); if (!P || !C || P.n !== C.n) return null;
+  const n = C.n, a = boxBlur(P.v, n), b = boxBlur(C.v, n), D = new Float32Array(n*n).fill(NaN), B = 20;
+  for (let k = 0; k < n*n; k++) if (a[k] === a[k] && b[k] === b[k]) D[k] = a[k] - b[k];
+  const med = arr => { arr.sort((x, y) => x - y); return arr[arr.length >> 1]; };
+  for (let J = 0; J < n; J += B) for (let I = 0; I < n; I += B){ const q = [];
+    for (let j = J; j < Math.min(n, J+B); j++) for (let i = I; i < Math.min(n, I+B); i++){ const x = D[j*n + i]; if (x === x) q.push(x); }
+    if (q.length < 40) continue; const m = med(q);
+    for (let j = J; j < Math.min(n, J+B); j++) for (let i = I; i < Math.min(n, I+B); i++) D[j*n + i] -= m; }
+  const all = []; for (let k = 0; k < n*n; k += 3) if (D[k] === D[k]) all.push(Math.abs(D[k]));
+  if (all.length < 1000) return null;
+  const thr = Math.max(15, 5*1.4826*med(all));
+  return {n, half: C.half, D, thr, cur: b};
+}
+// surface (mm²) assombrie depuis la photo précédente dans un disque (repère mm de la cible, y vers le haut)
+function changeArea(M, x, y, rad, clair){
+  if (!M) return null; const {n, half, D, thr} = M; let c = 0;
+  const i0 = Math.round((x - rad + half)/TEX_STEP), i1 = Math.round((x + rad + half)/TEX_STEP);
+  const j0 = Math.round((half - y - rad)/TEX_STEP), j1 = Math.round((half - y + rad)/TEX_STEP);
+  for (let j = Math.max(0, j0); j <= Math.min(n-1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(n-1, i1); i++){
+    const xx = -half + i*TEX_STEP, yy = half - j*TEX_STEP; if ((xx-x)**2 + (yy-y)**2 > rad*rad) continue;
+    if (clair ? D[j*n + i] < -thr : D[j*n + i] > thr) c++; }
+  return c*TEX_STEP*TEX_STEP;
+}
+// Contrôle par la photo précédente (v30, mode séries, photos prises à la longue-vue — champ de l'oculaire repéré —, et
+// seulement quand le recalage par l'image a réussi). À 25 m derrière la longue-vue, le fond vu par un trou est sombre :
+// un coup assombrit. Sur papier (11/10, 23/10) un trou peut au contraire éclaircir : la règle y faisait perdre 15 coups
+// sur 60, elle n'est donc pas appliquée aux photos ordinaires. Sur le 06/11,
+// un vrai coup assombrit 20 à 63 mm² dans un disque de 5,5 mm ; un chiffre imprimé ou un ancien trou repris à tort, au
+// plus 22. Un nouvel impact sous DIFF_VETO mm² est écarté ; s'il manque des coups annoncés, les plus fortes zones
+// assombries (au moins DIFF_ADD mm²) hors des impacts déjà placés deviennent des impacts, à la place des positions
+// estimées dans les déchirures. Le nombre vient toujours de l'utilisateur.
+let DIFF_ON = !window.__noDiff; const DIFF_VETO = 18, DIFF_ADD = 18, DIFF_R = 5.5;
+function diffRefine(holes){
+  if (!DIFF_ON || !state.curSeries || !state.img.field || !state.prevLum || !state.lastAlign || state.lastAlign.source !== "anneaux+image" || state.holeHue != null) return holes;
+  const cal = getCal(), M = diffMap(); if (!cal || !M) return holes;
+  const nShots = Math.round(+$("fShots").value) || 0, info = {veto: 0, ajout: 0};
+  // un trou ne fait que s'assombrir ; un chiffre ou un cordon flou s'assombrit d'un côté et s'éclaircit de l'autre
+  const nouveau = (x, y) => { const d = changeArea(M, x, y, DIFF_R); return d >= DIFF_VETO && changeArea(M, x, y, DIFF_R, true) < 0.9*d; };
+  let kept = holes.filter(h => { if (h.est || h.manual) return true; const m = imgToMm(cal, h.x, h.y); return nouveau(m.x, m.y); });
+  info.veto = holes.length - kept.length;
+  const real = kept.filter(h => !h.est), est = kept.filter(h => h.est);
+  let missing = nShots ? nShots - real.length : 0;
+  if (missing > 0){
+    // zones assombries : somme glissante sur un carré de 9 mm, maxima pris un à un
+    const {n, half, D, thr} = M, C = new Float32Array((n+1)*(n+1));
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){ const o = (j+1)*(n+1) + i+1; C[o] = (D[j*n + i] > thr ? 1 : 0) + C[o-n-1] + C[o-1] - C[o-n-2]; }
+    const w = Math.round(4.5/TEX_STEP), box = (i, j) => { const a = Math.max(0, i-w), b = Math.max(0, j-w), c = Math.min(n, i+w+1), d = Math.min(n, j+w+1);
+      return C[d*(n+1) + c] - C[b*(n+1) + c] - C[d*(n+1) + a] + C[b*(n+1) + a]; };
+    // pas d'exclusion autour des anciens trous : ils ne changent pas d'une photo à l'autre, sauf si un coup y tombe
+    const taken = real.map(h => imgToMm(cal, h.x, h.y)), added = [];
+    const near = (x, y, r) => taken.concat(added).some(p => Math.hypot(p.x - x, p.y - y) < r);
+    const cands = [];
+    for (let j = w; j < n-w; j += 2) for (let i = w; i < n-w; i += 2){ const x = -half + i*TEX_STEP, y = half - j*TEX_STEP;
+      if (Math.hypot(x, y) > 105) continue; const v = box(i, j)*TEX_STEP*TEX_STEP; if (v >= DIFF_ADD) cands.push([v, i, j]); }
+    cands.sort((a, b) => b[0] - a[0]);
+    for (const [v, i, j] of cands){ if (added.length >= missing) break;
+      // centre : barycentre des points assombris, pondéré par l'assombrissement, dans un disque de 5 mm
+      let sx = 0, sy = 0, sw = 0; const r = Math.round(5/TEX_STEP);
+      for (let b = -r; b <= r; b++) for (let a = -r; a <= r; a++){ if (a*a + b*b > r*r) continue; const ii = i+a, jj = j+b;
+        if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue; const d = D[jj*n + ii]; if (!(d > thr)) continue;
+        sx += d*(-half + ii*TEX_STEP); sy += d*(half - jj*TEX_STEP); sw += d; }
+      if (!sw) continue; const x = sx/sw, y = sy/sw;
+      if (near(x, y, 7) || !nouveau(x, y)) continue;
+      added.push({x, y}); }
+    info.ajout = added.length;
+    const p = added.map(m => { const q = mmToImg(cal, m.x, m.y); return {x: q.x, y: q.y, diff: true}; });
+    kept = real.concat(p, est.slice(0, Math.max(0, missing - added.length)));
+  }
+  if (state.lastDetect) state.lastDetect.diff = info;
+  return kept;
+}
 function alignToPrev(){
   const pts = state.prevPts, g = state.curGrid; if (!pts || !pts.length || !g) return;
   const G = GRID_N, look = (x,y) => { const gx=Math.floor((x+260)/GRID_C), gy=Math.floor((y+260)/GRID_C); return (gx>=0&&gy>=0&&gx<G&&gy<G) ? g[gy*G+gx] : 0; };
@@ -1126,13 +1265,18 @@ function alignToPrev(){
     if (pairs.length === 1 || (pairs.length === 2 && Math.abs(pairs[0]-pairs[1]) <= 1))
     { thD = -pairs.reduce((a,v)=>a+v,0)/pairs.length*Math.PI/180; src = "chiffres"; } }
   const s0 = score(0,0,0); let best = thD != null ? {v:score(thD,0,0), th:thD, tx:0, ty:0} : {v:s0, th:0, tx:0, ty:0};
+  const ts = thD != null && TEX_ALIGN ? texShift(state.prevTex, texGrad(getCal(), 110), thD) : null;
+  // Les trous n'affinent pas ce décalage : essayé à ± 0,5 mm, le banc recule (23/10 : 29 → 28 sur 30 ; 06/11 : 27 → 24).
+  if (ts){ best = {v: score(thD, ts.tx, ts.ty), th: thD, tx: ts.tx, ty: ts.ty}; src = "anneaux+image"; }
+  else {
   const angles = thD != null ? [thD] : []; if (thD == null) for (let d=-5; d<=5; d+=0.5) angles.push(d*Math.PI/180);
   for (const th of angles) for (let tx=-4; tx<=4; tx+=0.5) for (let ty=-4; ty<=4; ty+=0.5){
     const v = score(th, tx, ty); if (v > best.v) best = {v, th, tx, ty}; }
   const b0 = {...best}, dSpan = thD != null ? 0 : 0.5;        // angle des chiffres : les trous n'affinent que le décalage
   for (let d=-dSpan; d<=dSpan+1e-9; d+=0.1) for (let tx=-0.5; tx<=0.5; tx+=0.25) for (let ty=-0.5; ty<=0.5; ty+=0.25){
     const th = b0.th + d*Math.PI/180, v = score(th, b0.tx+tx, b0.ty+ty); if (v > best.v) best = {v, th, tx:b0.tx+tx, ty:b0.ty+ty}; }
-  state.lastAlign = {rot: best.th*180/Math.PI, tx: best.tx, ty: best.ty, gain: s0 ? best.v/s0 : 0, chiffres: thD != null, source: src, corr: rr ? +rr.corr.toFixed(2) : null};
+  }
+  state.lastAlign = {rot: best.th*180/Math.PI, tx: best.tx, ty: best.ty, gain: s0 ? best.v/s0 : 0, chiffres: thD != null, source: src, corr: rr ? +rr.corr.toFixed(2) : null, pic: ts ? ts.pic : null};
   if (thD == null && best.v < s0*1.05 + 5) return;
   state.ringRef = {img: state.img, rings, th: best.th};
   const cal = getCal(), [a,b,c,d] = cal.M, co = Math.cos(best.th), sn = Math.sin(best.th);
@@ -1444,6 +1588,7 @@ $("lotGo").onclick = async () => {
       if (i && !prepareNextSeries()){ $("lotProg").textContent = `Arrêt à la photo ${i+1} : la photo précédente n'est pas calée. Recale-la puis recommence.`; its.length = i; break; }
       setImage(c, false, i > 0);
       its[i].cal = calCopy(); its[i].doute = !getCal() || !!state.calSuspect;
+      its[i].ring = state.ringRef && state.ringRef.img === state.img ? state.ringRef : null;   // anneaux bruts de cette photo
       its[i].found = state.holes.filter(h => (h.s||0) === state.curSeries && !h.est).length;
     }
   } catch(err){ $("lotProg").textContent = "Une photo est illisible : retire-la de la liste."; lot.running = false; $("lotGo").disabled = false; return; }
@@ -1465,6 +1610,9 @@ async function lotShow(k){
     const it = lot.items[k], c = await decodeFile(it.file);
     state.img = c; state.sample = false; state.handles = JSON.parse(JSON.stringify(it.cal.handles)); state.persp = it.cal.persp.slice();
     state.calInfo = it.cal.calInfo; state.calSuspect = it.cal.calSuspect; state.lastDetect = it.cal.lastDetect;
+    // v30 : la photo est redécodée, donc un nouvel objet ; sans cela « Photo série suivante » relevait les anneaux sur le
+    // calage recalé au lieu du calage brut, et la rotation s'égarait (23/10 : 3,22° au lieu de 2,86°).
+    state.ringRef = it.ring ? {...it.ring, img: c} : null;
     const cal = getCal(), toImg = h => { const p = mmToImg(cal, h.mm.x, h.mm.y), o = {...h, x: p.x, y: p.y}; delete o.mm; return o; };
     state.holes = lot.master.filter(h => (h.s||0) <= k).map(toImg);
     lot.hidden = lot.master.filter(h => (h.s||0) > k);
@@ -1479,7 +1627,7 @@ function lotShowNav(){
   const n = lot.items.length, k = lot.k, it = lot.items[k];
   $("lotNav").hidden = false; $("lotPrev").disabled = k === 0; $("lotNext").disabled = k === n-1;
   $("lotLbl").textContent = `Série ${k+1} / ${n}`;
-  const nb = state.holes.filter(h => (h.s||0) === k).length, warn = nb !== it.coups || it.doute;
+  const nb = state.holes.filter(h => (h.s||0) === k).length; it.found = nb;
   $("lotInfo").innerHTML = `${esc(it.file.name)} · ${nb} impact${nb>1?"s":""} pour ${it.coups} coup${it.coups>1?"s":""} annoncé${it.coups>1?"s":""}`
     + (it.doute ? ` · <span class="warn">⚠ calage douteux</span>` : nb !== it.coups ? ` · <span class="warn">⚠ à vérifier</span>` : "")
     + ` · ${lot.items.filter(x => x.found !== x.coups || x.doute).length} série(s) sur ${n} à vérifier après l'analyse`;
@@ -1522,7 +1670,7 @@ stage.addEventListener("drop", e => { e.preventDefault(); loadFile(e.dataTransfe
 
 function setImage(canvas, isSample, next){
   state.img = canvas; state.sample = isSample; state.undo = []; $("bUndo").disabled = true;
-  if (!next){ state.inkGrid = null; state.curSeries = 0; state.prevGrid = null; state.prevHoleGrid = null; state.prevDigits = null; state.prevRings = null; state.prevRingTh = 0; state.ringRef = null; state.prevPts = null; state.carry = null; state.a1mm = null; state.holeHue = null; state.lastAlign = null; }
+  if (!next){ state.inkGrid = null; state.curSeries = 0; state.prevGrid = null; state.prevHoleGrid = null; state.prevDigits = null; state.prevRings = null; state.prevRingTh = 0; state.ringRef = null; state.prevPts = null; state.prevTex = null; state.prevLum = null; state.carry = null; state.a1mm = null; state.holeHue = null; state.lastAlign = null; }
   $("badge").hidden = !isSample && !next;
   $("badge").textContent = isSample ? "Exemple · importe ta photo" : `Série ${state.curSeries+1}`;
   const ok = calibrate(), doute = ok && state.calSuspect;
@@ -1530,7 +1678,7 @@ function setImage(canvas, isSample, next){
   const calN = getCal();
   const old = next && state.carry && calN ? state.carry.map(c => { const p = mmToImg(calN, c.mm.x, c.mm.y); const h = {x:p.x, y:p.y, s:c.s, split:c.split}; if (c.o != null) h.o = c.o; if (c.manual) h.manual = true; return h; }) : [];
   // calage douteux : mieux vaut ne rien détecter que remplir la cible de faux impacts
-  state.holes = old.concat(doute ? [] : detectHoles().map(h => ({...h, s: state.curSeries})));
+  state.holes = old.concat(doute ? [] : diffRefine(detectHoles()).map(h => ({...h, s: state.curSeries})));
   fit(); setMode(ok && !doute ? "add" : "calib");
   if (!ok) $("hint").innerHTML = "<b>Visuel noir non trouvé automatiquement.</b> " + HINTS.calib;
   if (doute) $("hint").innerHTML = CAL_DOUTE + "Aucun impact n'a été détecté. " + HINTS.calib + " Puis touche « Détecter les impacts ».";
@@ -1563,6 +1711,7 @@ function renderSeries(shots, sers, cal_mm, dist, card, body, msgEl, nSer){
 }
 function refresh(){
   render();
+  if (lot && !lot.running && lot.items[lot.k] && !$("lotNav").hidden) lotShowNav();   // v30 : compteur et ⚠ suivent les corrections
   const cal_mm = calMm(), dist = +$("fDist").value;
   const shots = currentShots(), st = computeStats(shots, cal_mm, dist);
   const ld = state.lastDetect, nS = Math.round(+$("fShots").value)||0;
@@ -1760,7 +1909,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v29");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v30");
     renderHistory();
   }
 }
@@ -2510,7 +2659,7 @@ $("hMetric").value = ls.get("c50_hmetric", "sdr");
 let lastW = 0;
 new ResizeObserver(() => { if ($("view-an").hidden) return; const w = Math.round(stage.getBoundingClientRect().width); resize(); if (state.img && w !== lastW){ lastW = w; fit(); } }).observe(stage);
 setImage(makeSample(), true);
-window.__c50 = {setInk: v => { INK_ON = !!v; }, lvFrame: c => lvFrame(c), lvSetRef: () => { lvRefMes = lvMesures(); }, lvFindOculaire, lvCrop, state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries, refineCalib, mmToImg, toScreen};
+window.__c50 = {diffMap, changeArea, imgToMm, texGrad, texPoints, texShift, setInk: v => { INK_ON = !!v; }, lvFrame: c => lvFrame(c), lvSetRef: () => { lvRefMes = lvMesures(); }, lvFindOculaire, lvCrop, state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries, refineCalib, mmToImg, toScreen};
 renderHistory();
 initStore();
 })();
