@@ -2129,7 +2129,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v32");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v33");
     renderHistory();
   }
 }
@@ -2574,17 +2574,68 @@ function lvSetupZoom(track){
 // que le téléphone a choisis au calage, s'il l'accepte (Chrome Android : applyConstraints, mode « manual » avec la valeur
 // courante, sinon « single-shot »). Chaque téléphone n'honore pas tout : le statut dit ce qui a été figé. Tout repasse en
 // automatique avant un nouveau calage et quand l'objectif ou le zoom change.
-let lvFige = [];
+let lvFige = [], lvFigeExpo = "";
 const lvTrack = () => lvStream && lvStream.getVideoTracks()[0];
 const lvZoomCt = (t, caps) => { const z = t.getSettings ? t.getSettings().zoom : null; return caps.zoom && z != null ? {zoom: z} : {}; };
+// v33 : sur Chrome Android, « exposureMode: manual » coupe l'exposition automatique (CONTROL_AE_MODE_OFF) et garde la
+// durée de pose, mais la sensibilité (ISO) n'est imposée que si la page la donne. Or getSettings() ne donne pas l'ISO tant
+// que la caméra est en automatique : la v32 n'envoyait donc pas d'ISO, le capteur retombait sur sa sensibilité par défaut
+// et l'image devenait très sombre (premier essai au stand, 15/11). On fige donc l'exposition en cherchant l'ISO qui rend
+// la luminosité mesurée juste avant ; si on n'y arrive pas à 25 % près, l'exposition repasse en automatique. La balance des
+// blancs est verrouillée sans température imposée (Chrome : verrou AWB sur la valeur du moment). Chrome ne relit pas ces
+// verrous dans getSettings() (exposition « none », balance « continuous ») : seule la luminosité est vraiment contrôlée.
+const lvSleep = ms => new Promise(r => setTimeout(r, ms));
+// luminosité du champ : 85e centile de la luminance dans le cercle de l'oculaire (le papier)
+function lvLumOnce(){
+  const c = lvRaw(320); if (!c) return null;
+  const d = c.getContext("2d", {willReadFrequently:true}).getImageData(0, 0, c.width, c.height).data;
+  const o = lvCircle, k = o ? c.width/o.w : 1, cx = o ? o.cx*k : c.width/2, cy = o ? o.cy*k : c.height/2;
+  const R = o ? 0.85*o.R*k : Infinity, v = [];
+  for (let y=0;y<c.height;y++) for (let x=0;x<c.width;x++){ if ((x-cx)**2 + (y-cy)**2 > R*R) continue;
+    const i = 4*(y*c.width + x); v.push((d[i] + d[i+1] + d[i+2])/3); }
+  if (v.length < 50) return null; v.sort((a,b) => a-b); return v[Math.floor(0.85*(v.length-1))];
+}
+async function lvLum(){ const a = []; for (let i=0;i<3;i++){ const l = lvLumOnce(); if (l != null) a.push(l); await lvSleep(120); }
+  return a.length ? a.reduce((x,y) => x+y)/a.length : null; }
+const lvLin = l => Math.pow(Math.max(1, l)/255, 2.2);   // valeur d'écran → lumière reçue, à peu près
+// cherche l'ISO qui rend la luminosité L0 ; renvoie {iso, ratio} (ratio = lumière voulue / lumière obtenue) ou null
+async function lvFigerExposition(t, caps, st, acc, L0){
+  const I = caps.iso; if (!I || !(I.max > 0) || L0 == null) return null;
+  const clamp = v => Math.round(Math.min(I.max, Math.max(I.min || 1, v)));
+  let iso = clamp(st.iso > 0 ? st.iso : Math.sqrt(Math.max(1, I.min || 1)*I.max)), ratio = null;
+  for (let it = 0; it < 6; it++){
+    await t.applyConstraints({advanced: [{...acc, exposureMode: "manual", iso}]});
+    await lvSleep(450); const L = await lvLum(); if (L == null) return null;
+    ratio = lvLin(L0)/lvLin(L);
+    if (L >= 250 && ratio < 1) ratio = Math.min(ratio, 0.5);           // blanc saturé : la mesure sous-estime l'excès
+    if (Math.abs(Math.log(ratio)) < Math.log(1.12)) break;
+    const next = clamp(iso*Math.min(4, Math.max(0.25, ratio)));
+    if (next === iso) break; iso = next;
+  }
+  return {iso, ratio};
+}
 async function lvFigerCamera(){
-  const t = lvTrack(); lvFige = [];
+  const t = lvTrack(); lvFige = []; lvFigeExpo = "";
   if (!t || !t.getCapabilities || !t.applyConstraints) return lvFige;
   const caps = t.getCapabilities() || {}, st = t.getSettings ? t.getSettings() : {}; let acc = lvZoomCt(t, caps);
-  for (const [nom, k, vals] of [["exposition", "exposureMode", ["exposureTime", "iso"]],
-      ["balance des blancs", "whiteBalanceMode", ["colorTemperature"]], ["mise au point", "focusMode", ["focusDistance"]]]){
+  // 1. exposition : ISO cherché sur la luminosité d'avant, sinon laissée en automatique
+  if ((caps.exposureMode || []).includes("manual")){
+    const L0 = await lvLum(); let r = null;
+    try { r = await lvFigerExposition(t, caps, st, acc, L0); } catch(e){ r = null; }
+    if (r && Math.abs(Math.log(r.ratio)) < Math.log(1.25)){
+      acc = {...acc, exposureMode: "manual", iso: r.iso}; lvFige.push("exposition");
+      lvFigeExpo = `luminosité à ${Math.round(100*Math.abs(Math.pow(r.ratio, 1/2.2) - 1))} % près`;
+    } else {
+      lvFigeExpo = r ? "exposition laissée en automatique : la luminosité ne revenait pas à celle du calage"
+        : "exposition laissée en automatique : le téléphone ne permet pas de régler l'ISO";
+      try { await t.applyConstraints({advanced: [{...acc, exposureMode: "continuous"}]}); } catch(e){}
+    }
+  }
+  // 2. balance des blancs : verrou sur la valeur du moment, sans température imposée (Chrome la remplacerait par un préréglage)
+  // 3. mise au point : distance du moment si le téléphone la donne, sinon une mise au point unique
+  for (const [nom, k, vals] of [["balance des blancs", "whiteBalanceMode", []], ["mise au point", "focusMode", ["focusDistance"]]]){
     const modes = caps[k] || [], v = {}; vals.forEach(kk => { if (st[kk] != null && caps[kk]) v[kk] = st[kk]; });
-    const c = modes.includes("manual") && Object.keys(v).length ? {[k]: "manual", ...v} : modes.includes("single-shot") ? {[k]: "single-shot"} : null;
+    const c = modes.includes("manual") && (Object.keys(v).length || !vals.length) ? {[k]: "manual", ...v} : modes.includes("single-shot") ? {[k]: "single-shot"} : null;
     if (!c) continue;
     try { await t.applyConstraints({advanced: [{...acc, ...c}]}); acc = {...acc, ...c}; lvFige.push(nom); } catch(e){}
   }
@@ -2939,12 +2990,14 @@ function lvCadTick(){
 }
 $("bLvCal").onclick = async () => {
   lotEnd();
+  if (!state.sample && state.holes.length && !confirm("Le mode direct remplace la photo et les impacts de l'onglet Analyse. Continuer ?")) return;
+  // v33 : surveillance arrêtée AVANT de rendre l'automatique, pour qu'aucune image ne soit analysée pendant que la
+  // caméra se règle à nouveau ; référence et bouton de surveillance coupés jusqu'à la fin du calage
+  lvPause(); lvFails = 0; lvRef = false; $("bLvAuto").disabled = true;
   // caméra figée par un calage précédent : retour à l'automatique, le temps qu'elle se règle sur la lumière du moment
   if (await lvLibererCamera()){ lvStatus("Réglages automatiques de la caméra rendus : calage dans un instant…"); await new Promise(r => setTimeout(r, 1500)); }
   const raw = lvRaw(2600); lvCircle = raw ? lvFindOculaire(raw) : null;
   const c = lvCrop(raw, lvCircle); if (!c){ lvStatus("La caméra n'a pas encore d'image : réessaie dans une seconde."); return; }
-  if (!state.sample && state.holes.length && !confirm("Le mode direct remplace la photo et les impacts de l'onglet Analyse. Continuer ?")) return;
-  lvPause(); lvFails = 0;
   const avant = lvSnap();
   setImage(c, false); lvTouched = true;
   if (!lvCalOk()){
@@ -2958,10 +3011,12 @@ $("bLvCal").onclick = async () => {
   // restent exclus des images suivantes, mais ne comptent ni dans le bilan ni dans la séance.
   state.holes = []; refresh(); lvRefMes = lvMesures(); lvAvg = null;
   try { lvShowCadrage(lvQualite(state.img, getCal(), lvCircle)); } catch(e){}
-  lvRef = true; $("bLvAuto").disabled = false;
   let fige = "";
-  if ($("lvFigeChk").checked){ const f = await lvFigerCamera();
-    fige = f.length ? ` Caméra figée (${f.join(", ")}) : si la lumière change beaucoup, recale.` : " Le téléphone n'a pas accepté de figer la caméra : elle reste en automatique."; }
+  if ($("lvFigeChk").checked){ lvStatus("Cible calée. Réglage de la caméra figée : garde le téléphone immobile…");
+    const f = await lvFigerCamera(), ex = lvFigeExpo ? ` (${lvFigeExpo})` : "";
+    fige = f.length ? ` Caméra figée : ${f.join(", ")}${ex}. Si la lumière change beaucoup, recale.`
+      : ` Le téléphone n'a pas accepté de figer la caméra${ex} : elle reste en automatique.`; }
+  lvRef = true; $("bLvAuto").disabled = false;
   lvStatus(`Cible calée${lvCircle ? " (oculaire repéré)" : ""}. Prêt pour la surveillance : seuls les coups tirés à partir de maintenant compteront.${fige}`);
   speakText("Cible calée. Prêt pour la surveillance.");
 };

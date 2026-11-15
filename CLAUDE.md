@@ -44,8 +44,8 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v32` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v32`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v33` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v33`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,
@@ -224,6 +224,13 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
   avec une exposition et une balance des blancs qui flottent de ±8 % et ±3 %, amplitudes supposées, pas mesurées) : 06/11,
   3 tirages, 47 annonces justes sur 87 en automatique contre 59 figée. La référence moyennée (`LV_AVG` = 4 images sans coup,
   recalées) ne change rien sur le 15/11 et peu sur le 06/11 (automatique 47 → 51 justes, figée 59 → 59 et 3 → 1 fausse).
+  Premier essai réel (15/11, Android) : image très sombre dès que la caméra est figée. Cause, lue dans le code de Chrome
+  Android (`VideoCaptureCamera2.java`) : `exposureMode: "manual"` coupe l'exposition automatique et garde la durée de pose,
+  mais n'impose l'ISO que si la page le donne, et `getSettings()` ne donne pas l'ISO en automatique ; le capteur retombait
+  sur sa sensibilité par défaut. v33 : l'ISO est cherché (6 essais au plus) pour retrouver la luminosité du papier mesurée
+  juste avant ; à plus de 25 % d'écart, l'exposition repasse en automatique et le statut le dit. La balance des blancs est
+  verrouillée sans température imposée. Chrome ne relit pas ces verrous dans `getSettings()` : seule la luminosité est
+  contrôlée. Vérifié sur une caméra simulée seulement, pas encore sur le téléphone.
 - La rotation de la première photo n'est pas corrigée (seule la rotation entre photos d'une série l'est) :
   une photo penchée fausse la répartition horizontal/vertical, pas le score.
 
