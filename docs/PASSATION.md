@@ -363,6 +363,13 @@ Banc après v31 : 06/11 27 sur 30, 1 en trop (3 en v30) ; 01/11 5 sur 5, 0 en tr
 justes, 5 faux) ; les photos 1 à 4 restent mal servies (calage refusé sur la 2, oculaire non repéré sur la 3 et la 4,
 première photo sans comparaison). Temps ajouté par image sur ordinateur : environ 1 s.
 
+Séance du 15/11 au banc (après la v31) : `tests/verite-2026-11-15.json`, 9 photos ramenées à 2600 px. Le JSON longue-vue
+de l'utilisateur rangeait 8 coups en série 5 ; la vérité les range sur la première photo où le trou se voit, contrôlé sur
+les images redressées : 2, 2, 2, 2, 3, 1, 1, 1, 1 coups. Photos 1 et 2 confirmées par l'utilisateur. Deux corrections par
+rapport au premier rangement : (−52,9 ; 53,3) se voit dès la photo 3, (−76,5 ; 53,1) dès la photo 4. Le coup
+(−124 ; 75,7) est hors du champ sur les photos 1, 3 et 4 : rangé photo 5 par convention. v31 : 6 sur 15, 2 en trop
+(deux faux trous en série 3 sur le 10, à (0,2 ; 64,9) et (0,3 ; 35,7)). Plancher 6 et plafond 2.
+
 ## Pistes d'évolution
 
 L'utilisateur a dit avoir des idées d'évolution sans les avoir encore détaillées : demande-les lui avant de

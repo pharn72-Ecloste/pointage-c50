@@ -30,7 +30,7 @@ pas à pas, sans jargon, et propose toujours le chemin le plus simple.
 | `sw.js` | Service worker : cache pour le fonctionnement hors ligne. |
 | `manifest.webmanifest`, `icon-*.png`, `apple-touch-icon.png` | Installation comme appli (PWA). |
 | `tests/detection.test.cjs` | Test de non-régression de la détection. |
-| `tests/photos/` | Séances réelles : 02/10/2026 (9 mm, 10 m, 3 photos), 04/10/2026 (9 mm, 25 m, 2 photos, plus deux recadrages pour le calage), DDM4 .300 BLK (25 m, 3 photos de 5 coups ; la série 1 porte les annotations au pied à coulisse de l'utilisateur), 11/10/2026 (9 mm, 25 m, 5 photos : 10 + 5 + 5 + 5 + 5 coups), 23/10/2026 (P320 X-Carry, 9 mm, 15 m, fond bleu, 6 photos de 5 coups), 01/11/2026 (9 mm, 25 m, photos prises à l'oculaire d'une longue-vue, cible à 10 noir, 5 photos d'un coup), 06/11/2026 (9 mm, 25 m, images de la caméra en mode Longue-Vue ramenées à 2600 px, cible à 10 blanc, 30 photos d'un coup). |
+| `tests/photos/` | Séances réelles : 02/10/2026 (9 mm, 10 m, 3 photos), 04/10/2026 (9 mm, 25 m, 2 photos, plus deux recadrages pour le calage), DDM4 .300 BLK (25 m, 3 photos de 5 coups ; la série 1 porte les annotations au pied à coulisse de l'utilisateur), 11/10/2026 (9 mm, 25 m, 5 photos : 10 + 5 + 5 + 5 + 5 coups), 23/10/2026 (P320 X-Carry, 9 mm, 15 m, fond bleu, 6 photos de 5 coups), 01/11/2026 (9 mm, 25 m, photos prises à l'oculaire d'une longue-vue, cible à 10 noir, 5 photos d'un coup), 06/11/2026 (9 mm, 25 m, images de la caméra en mode Longue-Vue ramenées à 2600 px, cible à 10 blanc, 30 photos d'un coup), 15/11/2026 (9 mm, 25 m, photos à travers la longue-vue ramenées à 2600 px, cible à 10 blanc, fond clair derrière la cible, 9 photos pour 15 coups). |
 | `tests/attendu*.json` | Résultats de référence, vérifiés sur l'image et contre le comptage de l'utilisateur. |
 | `tests/verite-*.json` | Vérité terrain : positions de l'utilisateur après correction, tirées de sa sauvegarde `.json`. Base du banc d'essai. |
 | `docs/PASSATION.md` | Historique, mesures au pied à coulisse, décisions et pistes. |
@@ -139,7 +139,7 @@ jauge (149), dont 5 coups placés dans des déchirures ; et le calage sur deux r
 corrigées par l'utilisateur (`tests/verite-2026-10-11.json`) : coups retrouvés à 3 mm dans la bonne série, et
 impacts en trop. Niveau de la v14 : 28 sur 30, 4 en trop. Même banc pour la séance du 23/10/2026
 (`tests/verite-2026-10-23.json`) : 28 sur 30, 2 en trop depuis la v22. Et pour le 01/11/2026 (`tests/verite-2026-11-01.json`,
-photos à l'oculaire) : 5 sur 5, 1 en trop depuis la v30 (4 en trop en v27, 15 en v26). Et pour le 06/11/2026 (`tests/verite-2026-11-06.json`, 30 photos en mode Longue-Vue, saisie avec l'import par lot) : 27 sur 30, 3 en trop depuis la v30 (14 sur 30 et 19 en trop en v29) ; le coup de la série 21, passé dans un trou existant, est introuvable. 23/10 : 29 sur 30, 1 en trop depuis la v30. v31 : 06/11 27 sur 30 et 1 en trop, 01/11 5 sur 5 et 0 en trop, autres séances identiques. Le test vérifie aussi chaque rotation entre
+photos à l'oculaire) : 5 sur 5, 1 en trop depuis la v30 (4 en trop en v27, 15 en v26). Et pour le 06/11/2026 (`tests/verite-2026-11-06.json`, 30 photos en mode Longue-Vue, saisie avec l'import par lot) : 27 sur 30, 3 en trop depuis la v30 (14 sur 30 et 19 en trop en v29) ; le coup de la série 21, passé dans un trou existant, est introuvable. 23/10 : 29 sur 30, 1 en trop depuis la v30. v31 : 06/11 27 sur 30 et 1 en trop, 01/11 5 sur 5 et 0 en trop, autres séances identiques. Et pour le 15/11/2026 (`tests/verite-2026-11-15.json`, longue-vue, fond clair, coups rangés photo par photo) : 6 sur 15, 2 en trop en v31 ; rien de juste sur les photos 1 à 4, mal cadrées. Le test vérifie aussi chaque rotation entre
 photos à 0,2° près contre une référence (`rotRef`) mesurée hors de l'appli sur les trois anneaux de chiffres. Attention :
 la vérité terrain hérite du recalage de l'appli du téléphone pour les coups non déplacés, elle ne juge pas la rotation. Le plancher échoue si l'on recule ; quand une
 amélioration le dépasse, relève-le. Chaque nouvelle séance avec photos et sauvegarde `.json` s'ajoute de la
@@ -212,8 +212,9 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
   tombe quand l'utilisateur déplace le cercle (de même pour un coup estimé dans une déchirure).
 - Mode direct et changement de couleur (v31) : réglés sur deux séances seulement (06/11 fond sombre, 15/11 fond clair),
   jamais essayés en direct au stand. Direct simulé : 06/11 23 annonces justes sur 29, 1 fausse ; 15/11 5 justes, 0 fausse.
-  Au-delà de 6 % de zoom ou 25 % de lumière, l'image redevient référence sans rien annoncer. La séance du 15/11 n'est pas
-  au banc : il faut d'abord fixer avec l'utilisateur la photo où chaque coup apparaît (son JSON longue-vue les range mal).
+  Au-delà de 6 % de zoom ou 25 % de lumière, l'image redevient référence sans rien annoncer. La séance du 15/11 est au banc
+  (6 sur 15) ; sa vérité range chaque coup sur la première photo où son trou se voit (photos 1 et 2 confirmées par
+  l'utilisateur), un coup hors du champ sur les photos 1, 3 et 4 a pu être tiré plus tôt.
   L'assistant de calage (ligne « Cadrage ») ne mesure que l'image : il ne règle rien tout seul.
 - La rotation de la première photo n'est pas corrigée (seule la rotation entre photos d'une série l'est) :
   une photo penchée fausse la répartition horizontal/vertical, pas le score.

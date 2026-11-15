@@ -21,6 +21,9 @@
 //     fin, flou égalisé par zones, chiffres et anciens trous comptés moins) et non plus sur le seul assombrissement : le
 //     15/11, à fond clair, les trous du visuel noir éclaircissaient. 06/11 : 27 sur 30, 1 en trop ; 01/11 : 5 sur 5, 0 en
 //     trop ; séances sur papier inchangées.
+//   Séance du 15/11/2026 ajoutée au banc (9 photos à la longue-vue, fond clair, 2+2+2+2+3+1+1+1+1 coups), vérité terrain
+//     tests/verite-2026-11-15.json rangée photo par photo. v31 : 6 sur 15, 2 en trop. Les photos 1 à 4, mal cadrées, ne
+//     donnent rien de juste (calage refusé sur la photo 2) ; les 4 coups des photos 6 à 9 sont tous retrouvés.
 // Rotation entre photos (v22) : chaque photo est comparée à l'angle de référence `rotRef` (°, par rapport à la photo 1,
 //   signe de l'appli), à 0,2° près. Référence mesurée hors de l'appli par corrélation angulaire de chacun des trois
 //   anneaux de chiffres (9, 8 et 7) entre la photo k et la photo 1 analysées seules ; les trois anneaux concordent à
@@ -53,6 +56,11 @@ const SEANCES = [
   { nom: "06/11/2026", ref: "attendu-2026-11-06.json", coups: Array(30).fill(1),
     verite: "verite-2026-11-06.json", plancher: { trouves: 27, enTrop: 1 },
     photos: Array.from({ length: 30 }, (_, i) => `2026-11-06_photo${String(i + 1).padStart(2, "0")}.jpg`) },
+  // 15/11/2026 : 25 m, photos à travers la longue-vue, cible à 10 blanc, fond CLAIR derrière la cible (les trous du visuel
+  // noir éclaircissent au lieu d'assombrir). Photos 1 à 4 mal cadrées, calage refusé sur la photo 2.
+  { nom: "15/11/2026", ref: "attendu-2026-11-15.json", coups: [2, 2, 2, 2, 3, 1, 1, 1, 1],
+    verite: "verite-2026-11-15.json", plancher: { trouves: 6, enTrop: 2 },
+    photos: Array.from({ length: 9 }, (_, i) => `2026-11-15_photo${String(i + 1).padStart(2, "0")}.jpg`) },
 ];
 const TOL_VERITE_MM = 3.0;   // un coup est « retrouvé » s'il est à moins de 3 mm de la position de l'utilisateur, dans la même série
 // photo recadrée de 200 px en haut -> même échelle, centre décalé de 200 px vers le haut
