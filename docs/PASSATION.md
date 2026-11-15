@@ -368,7 +368,30 @@ de l'utilisateur rangeait 8 coups en série 5 ; la vérité les range sur la pre
 les images redressées : 2, 2, 2, 2, 3, 1, 1, 1, 1 coups. Photos 1 et 2 confirmées par l'utilisateur. Deux corrections par
 rapport au premier rangement : (−52,9 ; 53,3) se voit dès la photo 3, (−76,5 ; 53,1) dès la photo 4. Le coup
 (−124 ; 75,7) est hors du champ sur les photos 1, 3 et 4 : rangé photo 5 par convention. v31 : 6 sur 15, 2 en trop
-(deux faux trous en série 3 sur le 10, à (0,2 ; 64,9) et (0,3 ; 35,7)). Plancher 6 et plafond 2.
+(deux faux trous en série 3 sur les chiffres 8 et 9 à 12 h, à (0,2 ; 64,9) et (0,3 ; 35,7)). Plancher 6 et plafond 2.
+
+## v32 (15/11/2026) : caméra figée après le calage, référence moyennée
+
+Suite de l'étude des applis similaires (doc « Pointage C50 : ce que font les applis similaires ») : aucune appli ne détecte
+à travers une longue-vue ; le brevet US 9 129 356 (Shotspot) prend comme référence une pile d'images ; les capteurs
+automatiques du téléphone (exposition, balance des blancs, mise au point) changent l'image sans que rien ne bouge.
+
+Contrôle d'abord : l'import par lot du 15/11 fait sur le téléphone en v31 (JSON « V2 », 16 à 17 s pour 9 photos) donne les
+mêmes 8 coups que le rejeu sur ordinateur, à 0,6 mm près (6 justes, 2 faux sur les chiffres 8 et 9 à 12 h).
+
+Direct simulé bruité (`tests/direct-simule.cjs`) : 5 images différentes par photo, décalage de ±3 px, bruit de capteur
+(σ = 5), et en mode « auto » un gain de ±8 % et une balance des blancs de ±3 % tirés à chaque image (« fige » : ±1 % et
+±0,5 %). Ces amplitudes sont supposées : je ne les ai pas mesurées sur le S21. Résultats (annonces justes / fausses) :
+
+| | v31 auto | v31 figée | v32 auto | v32 figée |
+|---|---|---|---|---|
+| 06/11, 3 tirages (87 coups) | 47 / 0 | 59 / 3 | 51 / 0 | 59 / 1 |
+| 15/11, 1 tirage (13 coups) | 3 / 0 | 4 / 0 | 3 / 0 | 4 / 0 |
+
+Sans perturbation (images identiques), 06/11 : v31 24 justes 1 fausse, v32 23 et 1 ; 15/11 : 5 et 0 dans les deux.
+Lecture : figer la caméra est le gain le plus net (+12 sur 87), à condition que le téléphone l'accepte. La référence
+moyennée ne fait guère mieux que le hasard des tirages ; gardée car elle n'ajoute pas de temps et ôte 2 fausses annonces
+sur 3 en mode figé, à surveiller. Banc d'essai (photos) inchangé : ces deux changements ne touchent que le direct.
 
 ## Pistes d'évolution
 
