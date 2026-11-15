@@ -345,6 +345,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
       <div class="field" style="min-width:200px"><label for="lvCamSel">Objectif</label><select id="lvCamSel"></select></div>
       <div class="field" id="lvZoomBox" style="min-width:200px;flex:1" hidden><label for="lvZoom">Zoom <span id="lvZoomVal"></span></label><input id="lvZoom" type="range"></div>
     </div>
+    <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px;font-size:14px"><input id="lvFigeChk" type="checkbox" checked> Figer la lumière et la mise au point de la caméra après le calage</label>
 
     <div style="position:relative;background:#000;border-radius:12px;overflow:hidden;min-height:240px;display:flex;align-items:center;justify-content:center">
       <video id="lvVideo" autoplay playsinline muted style="width:100%;max-height:60vh;object-fit:contain;display:none"></video>
@@ -1343,7 +1344,7 @@ function colorDiff(P, C){
       const w = S[jj*n + ii]; if (w > v || (w === v && (b < 0 || (b === 0 && a < 0)))){ top = false; break; } }
     if (top) peaks.push({x: -half + i*TEX_STEP, y: half - j*TEX_STEP, v}); }
   peaks.sort((a, b) => b.v - a.v);
-  return {n, half, S, peaks, tm: [Math.round(tB-tA), Math.round(tC-tB), Math.round(performance.now()-tC)], lk: C.lk ? C.lk.map(v => +v.toFixed(3)) : null, flou: best[2] ? (best[1] ? "actuelle" : "précédente") + " floutée " + best[2]*TEX_STEP + " mm" : "aucun"};
+  return {n, half, S, peaks, Ca: C, tm: [Math.round(tB-tA), Math.round(tC-tB), Math.round(performance.now()-tC)], lk: C.lk ? C.lk.map(v => +v.toFixed(3)) : null, flou: best[2] ? (best[1] ? "actuelle" : "précédente") + " floutée " + best[2]*TEX_STEP + " mm" : "aucun"};
 }
 // valeur du changement au point (mm) : maximum dans un disque de 3 mm
 function colAt(M, x, y, rad = 3){
@@ -1414,6 +1415,7 @@ let DIFF_COL = !window.__noCol;
 function colRefine(holes, cal){
   const t0 = performance.now(), pc = state.prevCol; if (!pc.raster) pc.raster = colorRaster(pc.cal, COL_HALF, pc.img);
   const cr = colorRaster(cal), t1 = performance.now(), M = colorDiff(pc.raster, cr); if (!M) return null;
+  lvColLast = {img: state.img, P: pc.raster, n: pc.avgN || 1, cur: cr, Ca: M.Ca};    // v32 : pour la référence moyennée du direct
   const t2 = performance.now();
   const nShots = Math.round(+$("fShots").value) || 0, info = {ms: [Math.round(t1-t0), Math.round(t2-t1)], tm: M.tm, veto: 0, ajout: 0, couleur: true, flou: M.flou, lk: M.lk, pics: []};
   // chiffres imprimés (axes, à 37,5 + 25 k mm) : leur flou change d'une image à l'autre ; un changement centré dessus
@@ -2127,7 +2129,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v31");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v32");
     renderHistory();
   }
 }
@@ -2567,12 +2569,41 @@ function lvSetupZoom(track){
   el.onchange = () => { ls.set("c50_lvcam", {...lvCamPrefs(), zoom: +el.value}); lvRecaler(); };
   apply(); box.hidden = false;
 }
+// v32 : caméra figée après le calage. L'exposition, la balance des blancs et la mise au point automatiques changent
+// l'image d'une image à l'autre alors que rien ne bouge sur la cible ; la v31 compense après coup. On fige donc les réglages
+// que le téléphone a choisis au calage, s'il l'accepte (Chrome Android : applyConstraints, mode « manual » avec la valeur
+// courante, sinon « single-shot »). Chaque téléphone n'honore pas tout : le statut dit ce qui a été figé. Tout repasse en
+// automatique avant un nouveau calage et quand l'objectif ou le zoom change.
+let lvFige = [];
+const lvTrack = () => lvStream && lvStream.getVideoTracks()[0];
+const lvZoomCt = (t, caps) => { const z = t.getSettings ? t.getSettings().zoom : null; return caps.zoom && z != null ? {zoom: z} : {}; };
+async function lvFigerCamera(){
+  const t = lvTrack(); lvFige = [];
+  if (!t || !t.getCapabilities || !t.applyConstraints) return lvFige;
+  const caps = t.getCapabilities() || {}, st = t.getSettings ? t.getSettings() : {}; let acc = lvZoomCt(t, caps);
+  for (const [nom, k, vals] of [["exposition", "exposureMode", ["exposureTime", "iso"]],
+      ["balance des blancs", "whiteBalanceMode", ["colorTemperature"]], ["mise au point", "focusMode", ["focusDistance"]]]){
+    const modes = caps[k] || [], v = {}; vals.forEach(kk => { if (st[kk] != null && caps[kk]) v[kk] = st[kk]; });
+    const c = modes.includes("manual") && Object.keys(v).length ? {[k]: "manual", ...v} : modes.includes("single-shot") ? {[k]: "single-shot"} : null;
+    if (!c) continue;
+    try { await t.applyConstraints({advanced: [{...acc, ...c}]}); acc = {...acc, ...c}; lvFige.push(nom); } catch(e){}
+  }
+  return lvFige;
+}
+async function lvLibererCamera(){
+  const t = lvTrack(), had = lvFige.length; lvFige = []; if (!t || !had || !t.applyConstraints) return false;
+  const caps = t.getCapabilities ? t.getCapabilities() || {} : {}, c = lvZoomCt(t, caps);
+  for (const k of ["exposureMode", "whiteBalanceMode", "focusMode"]) if ((caps[k] || []).includes("continuous")) c[k] = "continuous";
+  try { await t.applyConstraints({advanced: [c]}); } catch(e){}
+  return true;
+}
 function lvInfo(track){
   const st = track.getSettings ? track.getSettings() : {}, sel = $("lvCamSel"), o = sel.options[sel.selectedIndex];
   return `${o ? o.textContent : "caméra"}, ${st.width || "?"}×${st.height || "?"}`;
 }
 // changer d'objectif ou de zoom change l'image : l'ancienne référence ne vaut plus
 function lvRecaler(){
+  lvLibererCamera();
   if (!lvRef && !lvWatching) return;
   lvPause(); lvRef = false; $("bLvAuto").disabled = true;
   lvStatus("Objectif ou zoom changé : recale la cible avant de surveiller.");
@@ -2595,7 +2626,7 @@ async function startLvCam(){
     const sel = $("lvCamSel");
     sel.innerHTML = cams.map((d, i) => `<option value="${esc(d.deviceId)}"${d.deviceId === nowId ? " selected" : ""}>${esc(lvCamName(d, i))}</option>`).join("");
     sel.onchange = async () => {
-      try { const t = await lvOpen(sel.value); ls.set("c50_lvcam", {deviceId: sel.value}); lvSetupZoom(t); lvRecaler();
+      try { const t = await lvOpen(sel.value); lvFige = []; ls.set("c50_lvcam", {deviceId: sel.value, ...(lvCamPrefs().fige === false ? {fige: false} : {})}); lvSetupZoom(t); lvRecaler();
         lvStatus("Objectif : " + lvInfo(t) + ". Recale la cible avant de surveiller."); }
       catch(err){ lvStatus("Objectif indisponible : " + err.message); }
     };
@@ -2624,6 +2655,7 @@ function lvPause(){
 function stopLvCam(){
   lvPause();
   if (lvStream){ lvStream.getTracks().forEach(t => t.stop()); lvStream = null; }
+  lvFige = [];
   $("lvCamRow").hidden = true;
   $("lvVideo").style.display = "none";
   $("lvPlaceholder").style.display = "block";
@@ -2769,11 +2801,28 @@ function lvMesures(){
 // v31 : la comparaison se fait sur la couleur, recalée et à lumière égalisée (colorDiff) ; un réglage de zoom de quelques %
 // ou un nuage ne justifient plus de tout remettre à zéro (15/11 : chaque image repartait de zéro). Seuils : 6 % d'échelle,
 // 25 % de lumière (au-delà, 06/11 : 7 % de zoom, le changement ne se distingue plus du bruit).
+// v32 : référence moyennée. Comme le brevet Shotspot (US 9 129 356), la référence n'est plus une seule image mais la
+// moyenne des dernières images sans coup (LV_AVG, moyenne glissante, chaque image recalée sur la précédente par lkAlign) :
+// le bruit du capteur, fort à travers une longue-vue, baisse d'autant. Remise à une seule image après un coup confirmé
+// ou un changement brusque (lvEcart), et si le recalage fin échoue.
+let LV_AVG = window.__lvAvg != null ? +window.__lvAvg : 4, lvColLast = null, lvAvg = null;
+function lvAvgUpdate(mix){
+  const c = lvColLast; lvColLast = null;
+  if (!(LV_AVG > 1) || !c || c.img !== state.img){ lvAvg = null; return; }
+  if (!mix || !c.Ca || !c.Ca.lk){ lvAvg = {img: state.img, raster: c.cur, n: 1}; return; }
+  const m = Math.min(c.n, LV_AVG - 1), P = c.P, C = c.Ca, N = P.L.length, out = {n: P.n, half: P.half};
+  for (const k of ["L", "A", "B"]){ const a = P[k], b = C[k], o = new Float32Array(N);
+    for (let q = 0; q < N; q++){ const x = a[q], y = b[q]; o[q] = x !== x ? y : y !== y ? x : (x*m + y)/(m + 1); }
+    out[k] = o; }
+  lvAvg = {img: state.img, raster: out, n: m + 1};
+}
 const lvEcart = (a, b) => !a || !b || Math.abs(a.px/b.px - 1) > 0.06 || Math.abs(a.vis/b.vis - 1) > 0.25 || Math.abs(a.pap/b.pap - 1) > 0.25;
 function lvFrame(canvas){
   if (!canvas) return null;
   const before = lvSnap(), fs = $("fShots").value;
   if (!prepareNextSeries()) return null;
+  if (lvAvg && state.prevCol && lvAvg.img === state.prevCol.img){ state.prevCol.raster = lvAvg.raster; state.prevCol.avgN = lvAvg.n; }
+  lvColLast = null;
   const serie = state.curSeries;
   $("fShots").value = "1";
   state.exclCells = 4;     // à travers l'oculaire, un léger décalage laissait dépasser le bord d'un chiffre imprimé
@@ -2798,8 +2847,8 @@ function lvFrame(canvas){
   const mes = lvMesures();
   const nouvelleRef = () => { state.holes = state.holes.filter(h => (h.s||0) !== serie); state.curSeries = before.curSeries;
     $("badge").textContent = `Série ${(state.curSeries||0)+1}`; lvRefMes = mes; lvPending = null; refresh(); };
-  if (lvEcart(mes, lvRefMes)){ nouvelleRef(); if (nouv.length) lvStatus("Lumière ou cadrage changé : nouvelle image de référence, rien n'est annoncé."); return null; }
-  if (!nouv.length){ nouvelleRef(); return null; }
+  if (lvEcart(mes, lvRefMes)){ nouvelleRef(); lvAvgUpdate(false); if (nouv.length) lvStatus("Lumière ou cadrage changé : nouvelle image de référence, rien n'est annoncé."); return null; }
+  if (!nouv.length){ nouvelleRef(); lvAvgUpdate(true); return null; }
   // Confirmation trou par trou : chaque trou nouveau doit être revu au même endroit (4 mm) sur LV_CONFIRM images de
   // suite. Exiger le même ensemble de trous d'une image à l'autre laissait la voix muette au stand (01/11) : quelques
   // faux trous qui apparaissent et disparaissent suffisaient à ne jamais confirmer le vrai.
@@ -2809,7 +2858,7 @@ function lvFrame(canvas){
   // on ne garde dans la séance que les trous confirmés ; les autres candidats de cette image sont oubliés
   const garde = new Set(nouvH.filter((h, i) => ok[i]));
   state.holes = state.holes.filter(h => (h.s||0) !== serie || garde.has(h)); refresh();
-  lvPending = null; lvRefMes = mes;
+  lvPending = null; lvRefMes = mes; lvAvgUpdate(false);
   return nouv.filter((p, i) => ok[i]);
 }
 function lvTick(){
@@ -2888,8 +2937,10 @@ function lvCadTick(){
       lvShowCadrage(q); } } catch(e){}
   lvCadTimer = setTimeout(lvCadTick, 2000);
 }
-$("bLvCal").onclick = () => {
+$("bLvCal").onclick = async () => {
   lotEnd();
+  // caméra figée par un calage précédent : retour à l'automatique, le temps qu'elle se règle sur la lumière du moment
+  if (await lvLibererCamera()){ lvStatus("Réglages automatiques de la caméra rendus : calage dans un instant…"); await new Promise(r => setTimeout(r, 1500)); }
   const raw = lvRaw(2600); lvCircle = raw ? lvFindOculaire(raw) : null;
   const c = lvCrop(raw, lvCircle); if (!c){ lvStatus("La caméra n'a pas encore d'image : réessaie dans une seconde."); return; }
   if (!state.sample && state.holes.length && !confirm("Le mode direct remplace la photo et les impacts de l'onglet Analyse. Continuer ?")) return;
@@ -2905,10 +2956,13 @@ $("bLvCal").onclick = () => {
   }
   // Ce qui est vu au calage sert seulement de référence : les trous déjà là (et les faux trous d'une image floue)
   // restent exclus des images suivantes, mais ne comptent ni dans le bilan ni dans la séance.
-  state.holes = []; refresh(); lvRefMes = lvMesures();
+  state.holes = []; refresh(); lvRefMes = lvMesures(); lvAvg = null;
   try { lvShowCadrage(lvQualite(state.img, getCal(), lvCircle)); } catch(e){}
   lvRef = true; $("bLvAuto").disabled = false;
-  lvStatus(`Cible calée${lvCircle ? " (oculaire repéré)" : ""}. Prêt pour la surveillance : seuls les coups tirés à partir de maintenant compteront.`);
+  let fige = "";
+  if ($("lvFigeChk").checked){ const f = await lvFigerCamera();
+    fige = f.length ? ` Caméra figée (${f.join(", ")}) : si la lumière change beaucoup, recale.` : " Le téléphone n'a pas accepté de figer la caméra : elle reste en automatique."; }
+  lvStatus(`Cible calée${lvCircle ? " (oculaire repéré)" : ""}. Prêt pour la surveillance : seuls les coups tirés à partir de maintenant compteront.${fige}`);
   speakText("Cible calée. Prêt pour la surveillance.");
 };
 
@@ -2936,6 +2990,8 @@ $("bLvSave").onclick = () => {
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
     lvStatus(`Image enregistrée (${c.width}×${c.height}) : ${name}, dans le dossier Téléchargements.`); }, "image/jpeg", 0.92);
 };
+$("lvFigeChk").checked = lvCamPrefs().fige !== false;
+$("lvFigeChk").onchange = () => { ls.set("c50_lvcam", {...lvCamPrefs(), fige: $("lvFigeChk").checked}); if (!$("lvFigeChk").checked) lvLibererCamera(); };
 $("bLvCamStart").onclick = startLvCam;
 $("bLvCamStop").onclick = stopLvCam;
 loadSettings();
@@ -2944,7 +3000,7 @@ $("hMetric").value = ls.get("c50_hmetric", "sdr");
 let lastW = 0;
 new ResizeObserver(() => { if ($("view-an").hidden) return; const w = Math.round(stage.getBoundingClientRect().width); resize(); if (state.img && w !== lastW){ lastW = w; fit(); } }).observe(stage);
 setImage(makeSample(), true);
-window.__c50 = {diffMap, changeArea, imgToMm, texGrad, texPoints, texShift, setInk: v => { INK_ON = !!v; }, lvFrame: c => lvFrame(c), lvSetRef: () => { lvRefMes = lvMesures(); }, lvFindOculaire, lvCrop, lvQualite, lvCadrageHtml, colorDiff, colorRaster, state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries, refineCalib, mmToImg, toScreen};
+window.__c50 = {diffMap, changeArea, imgToMm, texGrad, texPoints, texShift, setInk: v => { INK_ON = !!v; }, lvFrame: c => lvFrame(c), lvSetRef: () => { lvRefMes = lvMesures(); lvAvg = null; }, lvFindOculaire, lvCrop, lvQualite, lvCadrageHtml, colorDiff, colorRaster, state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries, refineCalib, mmToImg, toScreen};
 renderHistory();
 initStore();
 })();
