@@ -352,6 +352,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
       <div id="lvPlaceholder" class="muted" style="padding:40px;text-align:center">Caméra arrêtée</div>
     </div>
 
+    <div id="lvCadrage" hidden style="margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--surface);font-size:14px;line-height:1.5"></div>
     <div id="lvStatus" style="margin-top:12px;padding:10px 14px;border-radius:8px;background:var(--surface);font-family:var(--mono);font-size:13px">
       Statut : En attente du démarrage de la caméra.
     </div>
@@ -1047,6 +1048,8 @@ function prepareNextSeries(){
   for (let i=0;i<grid.length;i++) if (grid[i] && (k++ % stride === 0)) pts.push([(i%G + 0.5)*GRID_C - 260, (Math.floor(i/G) + 0.5)*GRID_C - 260]);
   state.prevGrid = grid; state.prevPts = pts; state.prevTex = TEX_ALIGN ? texPoints(texGrad(cal, 105)) : null;
   state.prevLum = TEX_ALIGN ? lumRaster(cal, 110) : null;
+  // v31 : relevé couleur de cette image, calculé seulement si l'image suivante est prise à la longue-vue (colRefine)
+  state.prevCol = TEX_ALIGN && DIFF_COL ? {img: state.img, cal: {...cal}} : null;
   state.carry = state.holes.map(h => ({mm: imgToMm(cal, h.x, h.y), s: h.s||0, split: h.split, o: h.o, manual: h.manual, est: h.est, diff: h.diff}));
   state.curSeries = state.holes.reduce((m,h)=>Math.max(m, h.s||0), state.curSeries) + 1;
   return true;
@@ -1201,6 +1204,155 @@ function changeArea(M, x, y, rad, clair){
     if (clair ? D[j*n + i] < -thr : D[j*n + i] > thr) c++; }
   return c*TEX_STEP*TEX_STEP;
 }
+// ---------- v31 : ce qui a changé de COULEUR depuis l'image précédente (longue-vue) ----------
+// Le 15/11 (fond clair derrière la cible), à travers la longue-vue, un trou du visuel noir n'était pas plus sombre : un
+// peu plus clair et brun. La v30 n'en voyait aucun sur 10 (écart de luminosité 8 à 17, noyé sous les chiffres et cordons
+// blancs, 66 à 76). Le 06/11 (fond sombre), un trou assombrissait. Un trou change donc toujours la couleur ou la
+// luminosité de l'endroit où il tombe ; les chiffres et les cordons, eux, ne changent pas, à condition d'égaliser le flou
+// des deux images. Mesuré hors appli : le plus fort changement est le vrai coup 25 fois sur 28 paires (06/11) et 5 sur 6
+// (15/11). On relève Lab tous les 0,5 mm dans le repère de la cible (même grille que lumRaster).
+const COL_HALF = 125, COL_KL = 0.3; let COL_RATIO = +window.__colRatio || 1.2;
+let COL_FLOOR = 10, COL_KEEP = 9, COL_DIGIT = 0.5, COL_OLD = +window.__colOld || 0.8;
+function srgbLin(c){ c /= 255; return c <= 0.04045 ? c/12.92 : Math.pow((c + 0.055)/1.055, 2.4); }
+const SRGB_LUT = (() => { const t = new Float32Array(256); for (let i = 0; i < 256; i++) t[i] = srgbLin(i); return t; })();
+function labOf(r, g, b){
+  const R = SRGB_LUT[r], G = SRGB_LUT[g], B = SRGB_LUT[b];
+  const x = (0.4124*R + 0.3576*G + 0.1805*B)/0.95047, y = 0.2126*R + 0.7152*G + 0.0722*B, z = (0.0193*R + 0.1192*G + 0.9505*B)/1.08883;
+  const f = t => t > 0.008856 ? Math.cbrt(t) : 7.787*t + 16/116, fx = f(x), fy = f(y), fz = f(z);
+  return [116*fy - 16, 500*(fx - fy), 200*(fy - fz)];
+}
+function colorRaster(cal, half = COL_HALF, img = state.img){
+  if (!cal || !img) return null;
+  const n = Math.round(2*half/TEX_STEP) + 1, N = n*n, L = new Float32Array(N).fill(NaN), A = new Float32Array(N).fill(NaN), B = new Float32Array(N).fill(NaN);
+  const W = img.width, H = img.height, d = img.getContext("2d", {willReadFrequently:true}).getImageData(0, 0, W, H).data;
+  const F = img.field, NA = F && F.r ? F.r.length : 0;
+  const inField = (x, y) => { if (!F) return true; const X = x - F.cx, Y = y - F.cy;
+    const rl = NA ? F.r[Math.round(((Math.atan2(Y, X) + 2*Math.PI) % (2*Math.PI)) / (2*Math.PI) * NA) % NA] : F.R;
+    return Math.hypot(X, Y) < rl - 2*cal.pxmm; };
+  const o = 0.125;    // quatre points par case de 0,5 mm : moyenne, pas un pixel isolé
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){
+    const xm = -half + i*TEX_STEP, ym = half - j*TEX_STEP; if (xm*xm + ym*ym > half*half) continue;
+    let r = 0, g = 0, b = 0, c = 0;
+    for (const [u, v] of [[-o,-o],[o,-o],[-o,o],[o,o]]){ const p = mmToImg(cal, xm + u, ym + v), x = Math.round(p.x), y = Math.round(p.y);
+      if (x < 0 || y < 0 || x >= W || y >= H || !inField(p.x, p.y)) { c = -9; break; }
+      const k = 4*(y*W + x); r += d[k]; g += d[k+1]; b += d[k+2]; c++; }
+    if (c !== 4) continue;
+    const lab = labOf(Math.round(r/4), Math.round(g/4), Math.round(b/4)), q = j*n + i; L[q] = lab[0]; A[q] = lab[1]; B[q] = lab[2]; }
+  return {n, half, L, A, B};
+}
+// flou gaussien séparable d'un canal (NaN ignorés)
+function gaussNaN(v, n, sg){
+  if (!(sg > 0)) return v; const R = Math.ceil(2.5*sg), w = []; for (let k = -R; k <= R; k++) w.push(Math.exp(-k*k/(2*sg*sg)));
+  const pass = (src, horiz) => { const out = new Float32Array(n*n).fill(NaN);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){ const q = j*n + i; if (src[q] !== src[q]) continue; let s = 0, sw = 0;
+      for (let k = -R; k <= R; k++){ const ii = horiz ? i+k : i, jj = horiz ? j : j+k; if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
+        const x = src[jj*n + ii]; if (x === x){ s += w[k+R]*x; sw += w[k+R]; } }
+      out[q] = s/sw; }
+    return out; };
+  return pass(pass(v, true), false);
+}
+// Recalage fin entre deux relevés (affine, Lucas-Kanade sur la luminosité floutée de 1 mm) : le recalage par l'image
+// (texShift) ne corrige que rotation et décalage ; il reste jusqu'à 1 mm au bord du visuel (zoom, perspective), assez pour
+// que le bord du noir passe pour un changement. Retourne C rééchantillonné sur P.
+function sampleBil(v, n, x, y){ const i = Math.floor(x), j = Math.floor(y); if (i < 0 || j < 0 || i >= n-1 || j >= n-1) return NaN;
+  const fx = x - i, fy = y - j, q = j*n + i, a = v[q], b = v[q+1], c = v[q+n], d = v[q+n+1];
+  return a*(1-fx)*(1-fy) + b*fx*(1-fy) + c*(1-fx)*fy + d*fx*fy; }
+function lkAlign(P, C){
+  const n = C.n, N = n*n, c0 = (n-1)/2, pL = gaussNaN(P.L, n, 2), cL = gaussNaN(C.L, n, 2);
+  let a = [0, 0, 0, 0, 0, 0];          // x' = x + a0 + a2·u + a3·v ; y' = y + a1 + a4·u + a5·v  (u, v centrés, en cases)
+  const warp = (v, A) => { const o = new Float32Array(N).fill(NaN);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){ const u = i - c0, w = j - c0; o[j*n + i] = sampleBil(v, n, i + A[0] + A[2]*u + A[3]*w, j + A[1] + A[4]*u + A[5]*w); }
+    return o; };
+  for (let it = 0; it < 6; it++){
+    const W = warp(cL, a), H = Array.from({length: 6}, () => new Float64Array(6)), g = new Float64Array(6);
+    let mo = 0, mc = 0, k = 0; for (let q = 0; q < N; q += 5) if (pL[q] === pL[q] && W[q] === W[q]){ mo += pL[q]; mc += W[q]; k++; }
+    if (k < 2000) return C; const off = (mo - mc)/k;
+    for (let j = 2; j < n-2; j += 2) for (let i = 2; i < n-2; i += 2){ const q = j*n + i;
+      const r = pL[q] - W[q] - off, gx = (W[q+1] - W[q-1])/2, gy = (W[q+n] - W[q-n])/2; if (!(r === r && gx === gx && gy === gy)) continue;
+      if (Math.abs(r) > 25) continue;                      // trou nouveau, reflet : hors du calcul
+      const u = i - c0, w = j - c0, J = [gx, gy, gx*u, gx*w, gy*u, gy*w];
+      for (let m = 0; m < 6; m++){ g[m] += J[m]*r; for (let l = 0; l < 6; l++) H[m][l] += J[m]*J[l]; } }
+    // résolution 6 × 6 (Gauss)
+    const M = H.map((row, m) => [...row, g[m]]);
+    for (let c = 0; c < 6; c++){ let piv = c; for (let r = c+1; r < 6; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
+      [M[c], M[piv]] = [M[piv], M[c]]; if (Math.abs(M[c][c]) < 1e-9) return C;
+      for (let r = 0; r < 6; r++) if (r !== c){ const f = M[r][c]/M[c][c]; for (let l = c; l < 7; l++) M[r][l] -= f*M[c][l]; } }
+    const da = M.map((row, m) => row[6]/row[m]);
+    a = a.map((v, m) => v + da[m]);
+    if (Math.abs(da[0]) + Math.abs(da[1]) < 0.01) break; }
+  if (Math.abs(a[0]) > 6 || Math.abs(a[1]) > 6 || a.slice(2).some(v => Math.abs(v) > 0.05)) return C;   // plus de 3 mm ou 5 % : refusé
+  return {n, half: C.half, L: warp(C.L, a), A: warp(C.A, a), B: warp(C.B, a), lk: a};
+}
+// max / min glissants (carré de côté 2r+1), NaN ignorés
+function slideExt(v, n, r, isMax){
+  const pass = (src, horiz) => { const out = new Float32Array(n*n).fill(NaN);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){ let m = NaN;
+      for (let k = -r; k <= r; k++){ const ii = horiz ? i+k : i, jj = horiz ? j : j+k; if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
+        const x = src[jj*n + ii]; if (x === x && (m !== m || (isMax ? x > m : x < m))) m = x; }
+      out[j*n + i] = m; }
+    return out; };
+  return pass(pass(v, true), false);
+}
+// Carte du changement : flou égalisé (on floute la plus nette des deux), lumière égalisée (médianes), écart de chaque case
+// à la plage de valeurs de l'image précédente dans un voisinage de 0,5 mm (tolère un léger décalage), luminosité comptée à
+// 30 %, puis moyenne sur un disque de 2,5 mm. Retourne aussi les maxima locaux (un tous les 5 mm), du plus fort au plus faible.
+function colorDiff(P, C){
+  if (!P || !C || P.n !== C.n) return null;
+  const tA = performance.now(); C = lkAlign(P, C); const tB = performance.now();
+  const n = C.n, half = C.half, N = n*n, ok = new Uint8Array(N);
+  let cnt = 0; for (let q = 0; q < N; q++) if (P.L[q] === P.L[q] && C.L[q] === C.L[q]){ ok[q] = 1; cnt++; }
+  if (cnt < 20000) return null;
+  const sample = []; for (let q = 0; q < N; q += 7) if (ok[q]) sample.push(q);
+  const med = a => { const s = Float32Array.from(a).sort(); return s[s.length >> 1]; };
+  let pa = [P.L, P.A, P.B], ca = [C.L, C.A, C.B];
+  // flou, par carrés de 20 mm (le flou d'une longue-vue varie dans le champ : le bas des photos du 15/11 est plus flou) :
+  // on cherche qui flouter et de combien (0 à 1,5 mm) pour que les deux images s'y ressemblent le plus
+  const SG = [0, 1, 2, 3], cacheP = {}, cacheC = {};
+  const bl = (src, cache, k, c) => cache[k + "," + c] || (cache[k + "," + c] = SG[k] ? gaussNaN(src[c], n, SG[k]) : src[c]);
+  const blurP = SG.map((_, k) => [0, 1, 2].map(c => ({get v(){ return bl(pa, cacheP, k, c); }})));
+  const blurC = SG.map((_, k) => [0, 1, 2].map(c => ({get v(){ return bl(ca, cacheC, k, c); }})));
+  const opts = [[0, 0]]; for (let k = 1; k < SG.length; k++) opts.push([k, 0], [0, k]);
+  const T = 40, nt = Math.ceil(n/T), choice = new Uint8Array(nt*nt), stats = new Array(opts.length).fill(0);
+  for (let tj = 0; tj < nt; tj++) for (let ti = 0; ti < nt; ti++){ const qs = [];
+    for (let j = tj*T; j < Math.min(n, (tj+1)*T); j += 2) for (let i = ti*T; i < Math.min(n, (ti+1)*T); i += 2) if (ok[j*n + i]) qs.push(j*n + i);
+    if (qs.length < 50) continue; let bo = 0, be = Infinity;
+    opts.forEach(([kp, kc], o) => { const P0 = blurP[kp][0].v, C0 = blurC[kc][0].v, e = med(qs.map(q => Math.abs(P0[q] - C0[q]))); if (e < be - 1e-6){ be = e; bo = o; } });
+    choice[tj*nt + ti] = bo; stats[bo]++; }
+  const tileOf = q => { const i = q % n, j = (q/n)|0; return choice[Math.floor(j/T)*nt + Math.floor(i/T)]; };
+  pa = [0, 1, 2].map(c => { const o = new Float32Array(N); for (let q = 0; q < N; q++) o[q] = blurP[opts[tileOf(q)][0]][c].v[q]; return o; });
+  ca = [0, 1, 2].map(c => { const o = new Float32Array(N); for (let q = 0; q < N; q++) o[q] = blurC[opts[tileOf(q)][1]][c].v[q]; return o; });
+  const best = [0, 0, 0]; { let k = 0; stats.forEach((v, o) => { if (v > stats[k]) k = o; }); best[1] = opts[k][1] ? 1 : 0; best[2] = opts[k][0] || opts[k][1] ? SG[opts[k][0] || opts[k][1]] : 0; }
+  const tC = performance.now();
+  const off = [0, 1, 2].map(c => med(sample.map(q => pa[c][q])) - med(sample.map(q => ca[c][q])));
+  const lo = pa.map(v => slideExt(v, n, 1, false)), hi = pa.map(v => slideExt(v, n, 1, true));
+  const E = new Float32Array(N);
+  for (let q = 0; q < N; q++){ if (!ok[q]) continue; let s = 0;
+    for (let c = 0; c < 3; c++){ const x = ca[c][q] + off[c]; let dd = x > hi[c][q] ? x - hi[c][q] : x < lo[c][q] ? x - lo[c][q] : 0;
+      if (dd !== dd) dd = 0; s += c ? 4*dd*dd : COL_KL*(2.55*dd)**2; }
+    E[q] = Math.sqrt(s); }
+  // moyenne sur un carré de 5,5 mm (somme glissante), et validité : rien à moins de 5 mm du bord du champ ou de l'image
+  const rD = 5, n1 = n+1, I = new Int32Array(n1*n1), Z = new Float64Array(n1*n1), S = new Float32Array(N).fill(NaN);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){ const o = (j+1)*n1 + i+1, q = j*n + i;
+    I[o] = (ok[q] ? 0 : 1) + I[o-n1] + I[o-1] - I[o-n1-1]; Z[o] = E[q] + Z[o-n1] + Z[o-1] - Z[o-n1-1]; }
+  const box = (A, i, j, r) => { const a = i-r, b = j-r, c = i+r+1, d = j+r+1; return A[d*n1 + c] - A[b*n1 + c] - A[d*n1 + a] + A[b*n1 + a]; };
+  for (let j = 10; j < n-10; j++) for (let i = 10; i < n-10; i++){ if (box(I, i, j, 10) > 0) continue; S[j*n + i] = box(Z, i, j, rD)/((2*rD+1)**2); }
+  // maxima locaux (un tous les 5 mm), seulement parmi les cases qui ont nettement changé
+  const peaks = [];
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){ const v = S[j*n + i]; if (!(v >= 5)) continue; let top = true;
+    for (let b = -10; b <= 10 && top; b++) for (let a = -10; a <= 10; a++){ const ii = i+a, jj = j+b; if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
+      const w = S[jj*n + ii]; if (w > v || (w === v && (b < 0 || (b === 0 && a < 0)))){ top = false; break; } }
+    if (top) peaks.push({x: -half + i*TEX_STEP, y: half - j*TEX_STEP, v}); }
+  peaks.sort((a, b) => b.v - a.v);
+  return {n, half, S, peaks, tm: [Math.round(tB-tA), Math.round(tC-tB), Math.round(performance.now()-tC)], lk: C.lk ? C.lk.map(v => +v.toFixed(3)) : null, flou: best[2] ? (best[1] ? "actuelle" : "précédente") + " floutée " + best[2]*TEX_STEP + " mm" : "aucun"};
+}
+// valeur du changement au point (mm) : maximum dans un disque de 3 mm
+function colAt(M, x, y, rad = 3){
+  const {n, half, S} = M; let m = 0;
+  const i0 = Math.round((x + half)/TEX_STEP), j0 = Math.round((half - y)/TEX_STEP), r = Math.round(rad/TEX_STEP);
+  for (let b = -r; b <= r; b++) for (let a = -r; a <= r; a++){ if (a*a + b*b > r*r) continue; const i = i0+a, j = j0+b;
+    if (i < 0 || j < 0 || i >= n || j >= n) continue; const v = S[j*n + i]; if (v > m) m = v; }
+  return m;
+}
 // Contrôle par la photo précédente (v30, mode séries, photos prises à la longue-vue — champ de l'oculaire repéré —, et
 // seulement quand le recalage par l'image a réussi). À 25 m derrière la longue-vue, le fond vu par un trou est sombre :
 // un coup assombrit. Sur papier (11/10, 23/10) un trou peut au contraire éclaircir : la règle y faisait perdre 15 coups
@@ -1211,8 +1363,10 @@ function changeArea(M, x, y, rad, clair){
 // estimées dans les déchirures. Le nombre vient toujours de l'utilisateur.
 let DIFF_ON = !window.__noDiff; const DIFF_VETO = 18, DIFF_ADD = 18, DIFF_R = 5.5;
 function diffRefine(holes){
-  if (!DIFF_ON || !state.curSeries || !state.img.field || !state.prevLum || !state.lastAlign || state.lastAlign.source !== "anneaux+image" || state.holeHue != null) return holes;
-  const cal = getCal(), M = diffMap(); if (!cal || !M) return holes;
+  if (!DIFF_ON || !state.curSeries || !(state.img.field || state.lvStrict) || !state.prevLum || !state.lastAlign || state.lastAlign.source !== "anneaux+image" || state.holeHue != null) return holes;
+  const cal = getCal(); if (!cal) return holes;
+  if (DIFF_COL && state.prevCol){ const r = colRefine(holes, cal); if (r) return r; }
+  const M = diffMap(); if (!M) return holes;
   const nShots = Math.round(+$("fShots").value) || 0, info = {veto: 0, ajout: 0};
   // un trou ne fait que s'assombrir ; un chiffre ou un cordon flou s'assombrit d'un côté et s'éclaircit de l'autre
   const nouveau = (x, y) => { const d = changeArea(M, x, y, DIFF_R); return d >= DIFF_VETO && changeArea(M, x, y, DIFF_R, true) < 0.9*d; };
@@ -1247,6 +1401,64 @@ function diffRefine(holes){
     // (06/11 : 3 faux sur 18, dont deux à 5 cm du vrai coup)
     const p = added.map(m => { const q = mmToImg(cal, m.x, m.y); return {x: q.x, y: q.y, est: true, diff: true}; });
     kept = real.concat(p, est.slice(0, Math.max(0, missing - added.length)));
+  }
+  if (state.lastDetect) state.lastDetect.diff = info;
+  return kept;
+}
+// v31 : même contrôle, mais sur le changement de couleur (colorDiff) au lieu du seul assombrissement. Un nouvel impact
+// trouvé sur la photo est gardé si l'endroit a changé (au moins COL_KEEP) ; s'il manque des coups annoncés, les plus forts
+// changements deviennent des impacts, à deux conditions : au moins COL_FLOOR, et 30 % de plus que le changement suivant
+// (sinon rien ne se distingue du bruit : changement de zoom, flou, balle passée dans un trou). Position déduite de la
+// zone qui a changé : pointillé, « à vérifier ».
+let DIFF_COL = !window.__noCol;
+function colRefine(holes, cal){
+  const t0 = performance.now(), pc = state.prevCol; if (!pc.raster) pc.raster = colorRaster(pc.cal, COL_HALF, pc.img);
+  const cr = colorRaster(cal), t1 = performance.now(), M = colorDiff(pc.raster, cr); if (!M) return null;
+  const t2 = performance.now();
+  const nShots = Math.round(+$("fShots").value) || 0, info = {ms: [Math.round(t1-t0), Math.round(t2-t1)], tm: M.tm, veto: 0, ajout: 0, couleur: true, flou: M.flou, lk: M.lk, pics: []};
+  // chiffres imprimés (axes, à 37,5 + 25 k mm) : leur flou change d'une image à l'autre ; un changement centré dessus
+  // compte moitié moins (06/11 : les « 5 » à 112 mm faisaient le plus fort changement de 5 photos sans coup dessus)
+  const surChiffre = p => { const ax = Math.abs(p.x), ay = Math.abs(p.y), rad = Math.max(ax, ay);
+    return Math.min(ax, ay) < 9 && rad > 30 && Math.abs(rad - (37.5 + 25*Math.max(0, Math.round((rad - 37.5)/25)))) < 6; };
+  // ancien trou : son bord flou change aussi d'une image à l'autre (06/11, photo 25 : l'ancien trou de la série 11 venait
+  // juste derrière le vrai coup). Un coup peut tomber dans un ancien trou : on ne l'écarte pas, il compte 20 % de moins.
+  const anciens = (state.carry || []).map(c => c.mm);
+  const surAncien = p => anciens.some(a => Math.hypot(a.x - p.x, a.y - p.y) < 4);
+  M.peaks.forEach(p => { p.w = (surChiffre(p) ? p.v*COL_DIGIT : p.v)*(surAncien(p) ? COL_OLD : 1); }); M.peaks.sort((a, b) => b.w - a.w);
+  info.pics = M.peaks.slice(0, 4).map(p => [Math.round(p.x), Math.round(p.y), +p.w.toFixed(1)]);
+  const top = M.peaks.length ? M.peaks[0].w : 0, keepMin = Math.max(COL_KEEP, 0.5*top);
+  // Candidats : impacts trouvés sur la photo (score = changement à leur endroit) et plus forts changements ailleurs.
+  // Avec un nombre de coups annoncé, on garde les meilleurs, dans la limite de ce nombre : un impact trouvé sur la photo
+  // doit avoir changé (au moins COL_KEEP et la moitié du plus fort changement) ; un changement seul doit dépasser COL_FLOOR
+  // et le premier candidat écarté de COL_RATIO (sinon rien ne se distingue du bruit : zoom changé, flou, balle passée
+  // dans un trou). Sans nombre annoncé, seuls les impacts trouvés sont filtrés.
+  const fixe = holes.filter(h => h.est || h.manual);
+  const det = holes.filter(h => !h.est && !h.manual).map(h => { const m = imgToMm(cal, h.x, h.y), v = colAt(M, m.x, m.y);
+    return {h, x: m.x, y: m.y, w: surChiffre(m) ? v*COL_DIGIT : v, det: true}; });
+  const detOk = det.filter(c => c.w >= keepMin);
+  info.veto = det.length - detOk.length;
+  let kept;
+  if (!nShots) kept = detOk.map(c => c.h).concat(fixe);
+  else {
+    const pk = M.peaks.filter(p => Math.hypot(p.x, p.y) <= 120 && !det.some(c => Math.hypot(c.x - p.x, c.y - p.y) < 7));
+    const all = detOk.concat(pk).sort((a, b) => b.w - a.w), sel = [];
+    for (let k = 0; k < all.length && sel.length < nShots; k++){ const c = all[k];
+      if (c.det){ sel.push(c); continue; }
+      const next = all.slice(k+1).find(o => !o.det), ref = next ? next.w : 0;
+      if (c.w < COL_FLOOR || c.w < COL_RATIO*ref) break;
+      sel.push(c); }
+    const added = sel.filter(c => !c.det).map(p => {
+      // centre : barycentre du changement (au-dessus de la moitié du pic) dans un disque de 5 mm
+      const {n, half, S} = M, i0 = Math.round((p.x + half)/TEX_STEP), j0 = Math.round((half - p.y)/TEX_STEP), r = 10;
+      let sx = 0, sy = 0, sw = 0;
+      for (let b = -r; b <= r; b++) for (let a = -r; a <= r; a++){ if (a*a + b*b > r*r) continue; const i = i0+a, j = j0+b;
+        if (i < 0 || j < 0 || i >= n || j >= n) continue; const v = S[j*n + i]; if (!(v > 0.5*p.v)) continue;
+        const w = v - 0.5*p.v; sx += w*(-half + i*TEX_STEP); sy += w*(half - j*TEX_STEP); sw += w; }
+      return sw ? {x: sx/sw, y: sy/sw} : {x: p.x, y: p.y}; });
+    info.ajout = added.length; info.veto += detOk.length - sel.filter(c => c.det).length;
+    const real = sel.filter(c => c.det).map(c => c.h), est = fixe.filter(h => h.est && !h.manual), man = fixe.filter(h => h.manual);
+    const pts = added.map(m => { const q = mmToImg(cal, m.x, m.y); return {x: q.x, y: q.y, est: true, diff: true}; });
+    kept = real.concat(pts, man, est.slice(0, Math.max(0, nShots - real.length - pts.length - man.length)));
   }
   if (state.lastDetect) state.lastDetect.diff = info;
   return kept;
@@ -1673,7 +1885,7 @@ stage.addEventListener("drop", e => { e.preventDefault(); loadFile(e.dataTransfe
 
 function setImage(canvas, isSample, next){
   state.img = canvas; state.sample = isSample; state.undo = []; $("bUndo").disabled = true;
-  if (!next){ state.inkGrid = null; state.curSeries = 0; state.prevGrid = null; state.prevHoleGrid = null; state.prevDigits = null; state.prevRings = null; state.prevRingTh = 0; state.ringRef = null; state.prevPts = null; state.prevTex = null; state.prevLum = null; state.carry = null; state.a1mm = null; state.holeHue = null; state.lastAlign = null; }
+  if (!next){ state.inkGrid = null; state.curSeries = 0; state.prevGrid = null; state.prevHoleGrid = null; state.prevDigits = null; state.prevRings = null; state.prevRingTh = 0; state.ringRef = null; state.prevPts = null; state.prevTex = null; state.prevLum = null; state.prevCol = null; state.carry = null; state.a1mm = null; state.holeHue = null; state.lastAlign = null; }
   $("badge").hidden = !isSample && !next;
   $("badge").textContent = isSample ? "Exemple · importe ta photo" : `Série ${state.curSeries+1}`;
   const ok = calibrate(), doute = ok && state.calSuspect;
@@ -1915,7 +2127,7 @@ async function initStore(){
     }, err => { setSync("local", "Synchro interrompue"); });
   } else {
     store = {kind:"local", sessions: ls.get("c50_seances", [])};
-    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v30");
+    setSync("local", window.claude ? "Historique local (cet appareil)" : "Données enregistrées sur cet appareil · v31");
     renderHistory();
   }
 }
@@ -2395,7 +2607,8 @@ async function startLvCam(){
     $("bLvCamStop").disabled = false;
     $("bLvCal").disabled = false; $("bLvSave").disabled = false;
     $("bLvAuto").disabled = true;            // il faut d'abord caler la cible
-    lvStatus(`Caméra active (${lvInfo(track)}). Choisis l'objectif qui donne la plus grande image, cadre tout le visuel noir et ses cordons, puis appuie sur « Caler la cible ».`);
+    lvStatus(`Caméra active (${lvInfo(track)}). Cadre l'oculaire entier au centre de l'écran, règle la netteté avec la molette de la longue-vue jusqu'à voir « Cadrage bon », puis appuie sur « Caler la cible ».`);
+    if (!lvCadTimer) lvCadTimer = setTimeout(lvCadTick, 1000);
     speakText("Caméra activée. Cale la cible.");
   } catch(err){
     lvStatus("Erreur caméra : " + err.message);
@@ -2405,6 +2618,7 @@ async function startLvCam(){
 function lvPause(){
   if (lvTimer) clearTimeout(lvTimer);
   lvTimer = null; lvWatching = false; lvPending = null;
+  if (lvStream && !lvCadTimer) lvCadTimer = setTimeout(lvCadTick, 2000);
   $("bLvAuto").textContent = "Démarrer la surveillance";
 }
 function stopLvCam(){
@@ -2417,7 +2631,8 @@ function stopLvCam(){
   $("bLvCamStop").disabled = true;
   $("bLvCal").disabled = true; $("bLvSave").disabled = true;
   $("bLvAuto").disabled = true;
-  lvStatus("Caméra arrêtée." + lvBilan()); lvRef = false;
+  lvStatus("Caméra arrêtée." + lvBilan()); lvRef = false; $("lvCadrage").hidden = true;
+  if (lvCadTimer){ clearTimeout(lvCadTimer); lvCadTimer = null; }
   speakText("Caméra arrêtée.");
 }
 
@@ -2551,7 +2766,10 @@ function lvMesures(){
     return n ? sm/(3*n) : null; };
   return {px: cal.pxmm, vis: moy(55, 70), pap: moy(105, 120)};
 }
-const lvEcart = (a, b) => !a || !b || Math.abs(a.px/b.px - 1) > 0.02 || Math.abs(a.vis/b.vis - 1) > 0.08 || Math.abs(a.pap/b.pap - 1) > 0.08;
+// v31 : la comparaison se fait sur la couleur, recalée et à lumière égalisée (colorDiff) ; un réglage de zoom de quelques %
+// ou un nuage ne justifient plus de tout remettre à zéro (15/11 : chaque image repartait de zéro). Seuils : 6 % d'échelle,
+// 25 % de lumière (au-delà, 06/11 : 7 % de zoom, le changement ne se distingue plus du bruit).
+const lvEcart = (a, b) => !a || !b || Math.abs(a.px/b.px - 1) > 0.06 || Math.abs(a.vis/b.vis - 1) > 0.25 || Math.abs(a.pap/b.pap - 1) > 0.25;
 function lvFrame(canvas){
   if (!canvas) return null;
   const before = lvSnap(), fs = $("fShots").value;
@@ -2569,7 +2787,8 @@ function lvFrame(canvas){
     return null;
   }
   lvFails = 0;
-  state.holes = state.holes.filter(h => !((h.s||0) === serie && h.est));
+  // un coup placé par le changement de couleur (diff, v31) est gardé : c'est souvent le seul signe d'un trou dans le noir
+  state.holes = state.holes.filter(h => !((h.s||0) === serie && h.est && !h.diff));
   const nouvH = state.holes.filter(h => (h.s||0) === serie), nouv = nouvH.map(h => imgToMm(cal, h.x, h.y));
   // Référence glissante : une image sans trou nouveau devient la référence de la suivante (même trous, pas de série
   // en plus). Entre deux images à 3 s d'intervalle, lumière et zoom changent peu ; un nuage ou un réglage de zoom est
@@ -2599,6 +2818,7 @@ function lvTick(){
     lvBusy = true;
     try {
       const nouv = lvFrame(lvGrab());
+      if (lvCalOk(false)) try { lvShowCadrage(lvQualite(state.img, getCal(), lvCircle)); } catch(e){}
       if (nouv){
         const txt = nouv.map(lvPhrase).join(". ");
         lvStatus(`Impact${nouv.length > 1 ? "s" : ""} : ${txt}.${lvBilan()}`);
@@ -2610,6 +2830,64 @@ function lvTick(){
   lvTimer = setTimeout(lvTick, LV_PERIOD);
 }
 
+// ---------- v31 : assistant de calage du téléphone sur la longue-vue ----------
+// Mesures de l'image courante, en clair et en couleur (vert / orange / rouge), pour régler vite le téléphone. Repères tirés
+// du 15/11 : le cadrage des photos 6 à 9 (oculaire entier, cible visible jusqu'au 2, bord du visuel flou sur 2 à 3 mm,
+// 3,8 px/mm dans l'appli) est le plus exploitable ; zoomer davantage n'apporte rien, la détection travaille à 3,5 px/mm.
+function lvQualite(img, cal, oc){
+  const W = img.width, H = img.height, d = img.getContext("2d", {willReadFrequently:true}).getImageData(0, 0, W, H).data;
+  const F = img.field, NA = F && F.r ? F.r.length : 0;
+  const dedans = q => { if (q.x < 0 || q.y < 0 || q.x >= W || q.y >= H) return false; if (!F) return true;
+    const X = q.x - F.cx, Y = q.y - F.cy, rl = NA ? F.r[Math.round(((Math.atan2(Y, X) + 2*Math.PI) % (2*Math.PI)) / (2*Math.PI) * NA) % NA] : F.R;
+    return Math.hypot(X, Y) < rl; };
+  const lum = q => { const k = 4*(Math.round(q.y)*W + Math.round(q.x)); return (d[k] + d[k+1] + d[k+2])/3; };
+  // cible visible : plus grand cercle (100 à 250 mm) vu sur 95 % de son tour
+  let Rmax = 0; for (let R = 100; R <= 250; R += 25){ let n = 0; for (let a = 0; a < 360; a += 5){ const q = mmToImg(cal, R*Math.cos(a*Math.PI/180), R*Math.sin(a*Math.PI/180)); if (dedans(q)) n++; }
+    if (n >= 0.95*72) Rmax = R; else break; }
+  // netteté : largeur 10–90 % du bord du visuel (r = 100 mm), médiane de 40 rayons hors des axes des chiffres
+  const larg = [];
+  for (let a = 4; a < 360; a += 9){ if (a % 90 < 12 || a % 90 > 78) continue; const p = [];
+    for (let r = 92; r <= 108; r += 0.25){ const q = mmToImg(cal, r*Math.cos(a*Math.PI/180), r*Math.sin(a*Math.PI/180)); if (!dedans(q)){ p.length = 0; break; } p.push(lum(q)); }
+    if (p.length < 60) continue; const lo = p.slice(0, 12).sort((x, y) => x - y)[6], hi = p.slice(-12).sort((x, y) => x - y)[6], c = hi - lo; if (c < 20) continue;
+    const i10 = p.findIndex(v => v > lo + 0.1*c), i90 = p.findIndex(v => v > lo + 0.9*c); if (i10 >= 0 && i90 >= i10) larg.push((i90 - i10)*0.25); }
+  larg.sort((x, y) => x - y);
+  const net = larg.length >= 6 ? larg[larg.length >> 1] : null;
+  // oculaire : entier dans l'écran ? cible centrée dans l'oculaire (écart des centres, en rayons de l'oculaire)
+  const coupe = oc ? (oc.cx - oc.R < -0.03*oc.w || oc.cx + oc.R > 1.03*oc.w || oc.cy - oc.R < -0.03*oc.h || oc.cy + oc.R > 1.03*oc.h) : null;
+  const dec = F ? Math.hypot(cal.cx - F.cx, cal.cy - F.cy)/F.R : null;
+  return {px: cal.pxmm, Rmax, net, dec, coupe, oculaire: !!oc};
+}
+function lvCadrageHtml(q){
+  const pt = c => `<span style="color:${c === 2 ? "var(--ok, #2e9d5b)" : c === 1 ? "#d98a00" : "var(--bad, #d64545)"}">●</span>`;
+  const z = q.Rmax ? 11 - q.Rmax/25 : null, it = [], conseils = [];
+  // l'oculaire peut déborder sur les côtés de l'écran (photos 6 à 9 du 15/11) : ce qui compte, c'est la cible au centre
+  const cO = !q.oculaire ? 1 : q.dec < 0.15 ? 2 : q.dec < 0.3 ? 1 : 0;
+  it.push(`${pt(cO)} ${!q.oculaire ? "oculaire plus grand que l'écran" : q.dec < 0.15 ? "cible centrée dans l'oculaire" : "cible décentrée dans l'oculaire"}`);
+  if (cO < 2) conseils.push(!q.oculaire ? "baisse le zoom jusqu'à voir le cercle de l'oculaire" : "oriente la longue-vue pour mettre le visuel noir au centre du cercle");
+  const cZ = q.Rmax >= 125 ? 2 : q.Rmax >= 100 ? 1 : 0;
+  it.push(`${pt(cZ)} ${z ? `cible visible jusqu'au ${z} tout autour` : "visuel noir coupé"}`);
+  if (cZ < 2) conseils.push("baisse le zoom ou recentre : il faut voir la cible au moins jusqu'au 6 tout autour");
+  const cN = q.net == null ? 0 : q.net <= 2.5 ? 2 : q.net <= 3.5 ? 1 : 0;
+  it.push(`${pt(cN)} ${q.net == null ? "netteté non mesurée" : `netteté : bord du visuel flou sur ${fmt(q.net, 1)} mm`}`);
+  if (cN < 2) conseils.push("fais la mise au point avec la molette de la longue-vue");
+  const cP = q.px >= 3.2 ? 2 : q.px >= 2.5 ? 1 : 0;
+  it.push(`${pt(cP)} ${fmt(q.px, 1)} px/mm`);
+  if (cP < 2) conseils.push("monte un peu le zoom");
+  const tout = Math.min(cO, cZ, cN, cP);
+  return `<b>Cadrage ${tout === 2 ? "bon" : tout === 1 ? "acceptable" : "à corriger"}</b> : ${it.join(" · ")}${conseils.length ? `<br>${conseils[0][0].toUpperCase() + conseils[0].slice(1)}.` : ""}`;
+}
+function lvShowCadrage(q){ const el = $("lvCadrage"); if (!q){ el.hidden = false; el.innerHTML = "<b>Cadrage</b> : cible non trouvée. Mets le visuel noir entier dans l'image, oculaire au centre."; return; }
+  el.hidden = false; el.innerHTML = lvCadrageHtml(q); }
+// Avant la surveillance, une mesure toutes les 2 s sur l'image de la caméra, sans toucher à l'onglet Analyse
+let lvCadTimer = null;
+function lvCadTick(){
+  lvCadTimer = null; if (!lvStream || lvWatching) return;
+  try { const raw = lvRaw(2600), oc = raw ? lvFindOculaire(raw) : null, c = lvCrop(raw, oc);
+    if (c){ const avant = lvSnap(); state.img = c; let q = null;
+      try { if (calibrate() && !state.calSuspect) q = lvQualite(c, getCal(), oc); } finally { lvRestore(avant); }
+      lvShowCadrage(q); } } catch(e){}
+  lvCadTimer = setTimeout(lvCadTick, 2000);
+}
 $("bLvCal").onclick = () => {
   lotEnd();
   const raw = lvRaw(2600); lvCircle = raw ? lvFindOculaire(raw) : null;
@@ -2621,13 +2899,14 @@ $("bLvCal").onclick = () => {
   if (!lvCalOk()){
     lvRestore(avant);                        // calage refusé : l'onglet Analyse retrouve sa photo
     $("bLvAuto").disabled = true;
-    lvStatus(`Cible non calée${lvCircle ? " (oculaire repéré)" : ""} : centre le téléphone sur l'oculaire, monte le zoom pour que le cercle remplisse l'écran, garde tout le visuel noir et ses cordons, puis recommence.`);
+    lvStatus(`Cible non calée${lvCircle ? " (oculaire repéré)" : ""} : centre le téléphone sur l'oculaire, garde le cercle de l'oculaire entier dans l'écran et tout le visuel noir dedans, fais la mise au point, puis recommence.`);
     speakText("Cible non calée.");
     return;
   }
   // Ce qui est vu au calage sert seulement de référence : les trous déjà là (et les faux trous d'une image floue)
   // restent exclus des images suivantes, mais ne comptent ni dans le bilan ni dans la séance.
   state.holes = []; refresh(); lvRefMes = lvMesures();
+  try { lvShowCadrage(lvQualite(state.img, getCal(), lvCircle)); } catch(e){}
   lvRef = true; $("bLvAuto").disabled = false;
   lvStatus(`Cible calée${lvCircle ? " (oculaire repéré)" : ""}. Prêt pour la surveillance : seuls les coups tirés à partir de maintenant compteront.`);
   speakText("Cible calée. Prêt pour la surveillance.");
@@ -2665,7 +2944,7 @@ $("hMetric").value = ls.get("c50_hmetric", "sdr");
 let lastW = 0;
 new ResizeObserver(() => { if ($("view-an").hidden) return; const w = Math.round(stage.getBoundingClientRect().width); resize(); if (state.img && w !== lastW){ lastW = w; fit(); } }).observe(stage);
 setImage(makeSample(), true);
-window.__c50 = {diffMap, changeArea, imgToMm, texGrad, texPoints, texShift, setInk: v => { INK_ON = !!v; }, lvFrame: c => lvFrame(c), lvSetRef: () => { lvRefMes = lvMesures(); }, lvFindOculaire, lvCrop, state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries, refineCalib, mmToImg, toScreen};
+window.__c50 = {diffMap, changeArea, imgToMm, texGrad, texPoints, texShift, setInk: v => { INK_ON = !!v; }, lvFrame: c => lvFrame(c), lvSetRef: () => { lvRefMes = lvMesures(); }, lvFindOculaire, lvCrop, lvQualite, lvCadrageHtml, colorDiff, colorRaster, state, getCal, currentShots, computeStats, makeSample, setImage, prepareNextSeries, refineCalib, mmToImg, toScreen};
 renderHistory();
 initStore();
 })();
