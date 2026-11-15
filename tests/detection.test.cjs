@@ -17,6 +17,10 @@
 // v30 : recalage entre photos par l'image (relief des cordons, chiffres et trous) et, pour les photos à la longue-vue,
 //     contrôle par la photo précédente. 06/11 : 27 sur 30, 3 en trop ; 23/10 : 29 sur 30, 1 en trop ; 01/11 : 5 sur 5,
 //     1 en trop. Le décalage entre photos du 06/11 retombe sous 1 mm : son plafond particulier (3,5 mm) est retiré.
+// v31 : pour les photos à la longue-vue, le contrôle par la photo précédente porte sur le changement de COULEUR (recalage
+//     fin, flou égalisé par zones, chiffres et anciens trous comptés moins) et non plus sur le seul assombrissement : le
+//     15/11, à fond clair, les trous du visuel noir éclaircissaient. 06/11 : 27 sur 30, 1 en trop ; 01/11 : 5 sur 5, 0 en
+//     trop ; séances sur papier inchangées.
 // Rotation entre photos (v22) : chaque photo est comparée à l'angle de référence `rotRef` (°, par rapport à la photo 1,
 //   signe de l'appli), à 0,2° près. Référence mesurée hors de l'appli par corrélation angulaire de chacun des trois
 //   anneaux de chiffres (9, 8 et 7) entre la photo k et la photo 1 analysées seules ; les trois anneaux concordent à
@@ -44,10 +48,10 @@ const SEANCES = [
   // 01/11/2026 : 25 m, photos prises à l'oculaire d'une longue-vue, cible à 10 noir, un coup par photo. Pièges : chiffres
   // blancs du visuel pris pour des trous (deux coups tombés sur le « 9 » et le « 8 » du bas), bord sombre de l'oculaire.
   { nom: "01/11/2026", ref: "attendu-2026-11-01.json", coups: [1, 1, 1, 1, 1],
-    verite: "verite-2026-11-01.json", plancher: { trouves: 5, enTrop: 1 },
+    verite: "verite-2026-11-01.json", plancher: { trouves: 5, enTrop: 0 },
     photos: ["2026-11-01_coup1.jpg", "2026-11-01_coup2.jpg", "2026-11-01_coup3.jpg", "2026-11-01_coup4.jpg", "2026-11-01_coup5.jpg"] },
   { nom: "06/11/2026", ref: "attendu-2026-11-06.json", coups: Array(30).fill(1),
-    verite: "verite-2026-11-06.json", plancher: { trouves: 27, enTrop: 3 },
+    verite: "verite-2026-11-06.json", plancher: { trouves: 27, enTrop: 1 },
     photos: Array.from({ length: 30 }, (_, i) => `2026-11-06_photo${String(i + 1).padStart(2, "0")}.jpg`) },
 ];
 const TOL_VERITE_MM = 3.0;   // un coup est « retrouvé » s'il est à moins de 3 mm de la position de l'utilisateur, dans la même série

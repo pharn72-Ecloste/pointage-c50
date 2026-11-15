@@ -43,8 +43,8 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v30` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v30`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v31` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v31`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,
@@ -108,6 +108,10 @@ avec ≈ et laisse l'utilisateur corriger les points à la main (`h.o`).
    lui, ou qui s'éclaircit presque autant (chiffre flou), est écarté ; s'il manque des coups annoncés, les zones les
    plus assombries deviennent des impacts, avant les positions estimées dans les déchirures. Sur papier un trou peut
    éclaircir (11/10, 23/10) : la règle y faisait perdre 15 coups sur 60, elle n'y est pas appliquée.
+   Depuis la v31, ce contrôle porte sur le changement de couleur (`colorRaster`, `colorDiff`, `colRefine`) : recalage fin
+   affine, flou égalisé par carrés de 20 mm, Lab avec la luminosité comptée à 30 %. Le 15/11 (fond clair), un trou du noir
+   éclaircissait et brunissait : la v30 n'en voyait aucun sur 10. Un changement sur un chiffre compte moitié, sur un ancien
+   trou 20 % de moins ; un changement seul devient un coup s'il dépasse 10 et le suivant de 20 % (pointillé, à vérifier).
 9. **Coups tombés dans une déchirure** (mode séries, seulement s'il manque des coups annoncés) : pour chaque
    déchirure, surplus = surface gagnée depuis la photo précédente − surface des nouveaux impacts comptés
    dedans. Chaque coup manquant va à la déchirure au plus grand surplus (au moins 0,4 trou isolé), en
@@ -135,7 +139,7 @@ jauge (149), dont 5 coups placés dans des déchirures ; et le calage sur deux r
 corrigées par l'utilisateur (`tests/verite-2026-10-11.json`) : coups retrouvés à 3 mm dans la bonne série, et
 impacts en trop. Niveau de la v14 : 28 sur 30, 4 en trop. Même banc pour la séance du 23/10/2026
 (`tests/verite-2026-10-23.json`) : 28 sur 30, 2 en trop depuis la v22. Et pour le 01/11/2026 (`tests/verite-2026-11-01.json`,
-photos à l'oculaire) : 5 sur 5, 1 en trop depuis la v30 (4 en trop en v27, 15 en v26). Et pour le 06/11/2026 (`tests/verite-2026-11-06.json`, 30 photos en mode Longue-Vue, saisie avec l'import par lot) : 27 sur 30, 3 en trop depuis la v30 (14 sur 30 et 19 en trop en v29) ; le coup de la série 21, passé dans un trou existant, est introuvable. 23/10 : 29 sur 30, 1 en trop depuis la v30. Le test vérifie aussi chaque rotation entre
+photos à l'oculaire) : 5 sur 5, 1 en trop depuis la v30 (4 en trop en v27, 15 en v26). Et pour le 06/11/2026 (`tests/verite-2026-11-06.json`, 30 photos en mode Longue-Vue, saisie avec l'import par lot) : 27 sur 30, 3 en trop depuis la v30 (14 sur 30 et 19 en trop en v29) ; le coup de la série 21, passé dans un trou existant, est introuvable. 23/10 : 29 sur 30, 1 en trop depuis la v30. v31 : 06/11 27 sur 30 et 1 en trop, 01/11 5 sur 5 et 0 en trop, autres séances identiques. Le test vérifie aussi chaque rotation entre
 photos à 0,2° près contre une référence (`rotRef`) mesurée hors de l'appli sur les trois anneaux de chiffres. Attention :
 la vérité terrain hérite du recalage de l'appli du téléphone pour les coups non déplacés, elle ne juge pas la rotation. Le plancher échoue si l'on recule ; quand une
 amélioration le dépasse, relève-le. Chaque nouvelle séance avec photos et sauvegarde `.json` s'ajoute de la
@@ -206,6 +210,11 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
   du vrai coup). Ces coups (18 sur 30 le 06/11, dont 3 faux) sont donc marqués `est` et `diff` : cercle en pointillé,
   message dédié, série comptée « à vérifier » dans l'import par lot ; la marque suit la série aux photos suivantes et
   tombe quand l'utilisateur déplace le cercle (de même pour un coup estimé dans une déchirure).
+- Mode direct et changement de couleur (v31) : réglés sur deux séances seulement (06/11 fond sombre, 15/11 fond clair),
+  jamais essayés en direct au stand. Direct simulé : 06/11 23 annonces justes sur 29, 1 fausse ; 15/11 5 justes, 0 fausse.
+  Au-delà de 6 % de zoom ou 25 % de lumière, l'image redevient référence sans rien annoncer. La séance du 15/11 n'est pas
+  au banc : il faut d'abord fixer avec l'utilisateur la photo où chaque coup apparaît (son JSON longue-vue les range mal).
+  L'assistant de calage (ligne « Cadrage ») ne mesure que l'image : il ne règle rien tout seul.
 - La rotation de la première photo n'est pas corrigée (seule la rotation entre photos d'une série l'est) :
   une photo penchée fausse la répartition horizontal/vertical, pas le score.
 

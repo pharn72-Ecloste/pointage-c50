@@ -328,6 +328,41 @@ Banc après v30 : 06/11 27 sur 30, 3 en trop (14 et 19 en v29) ; 23/10 29 sur 30
 11/10 28 sur 30, 4 en trop ; 02/10, 04/10 et DDM4 : mêmes impacts et mêmes points (149 à la jauge). Temps ajouté par
 photo sur ordinateur : environ 0,2 s.
 
+## v31 (15/11/2026) : changement de couleur, direct qui ne repart plus de zéro, assistant de calage
+
+Séance du 15/11 (P320 X-Five, 25 m, 15 coups, 9 photos à la longue-vue puis une photo directe en fin de séance) : la
+v30 ne voyait aucun des 10 trous du visuel noir, ni en séries ni en direct. Le fond derrière la cible était clair : à
+travers la longue-vue, un trou du noir paraissait un peu plus clair et brun, pas plus sombre. Écart de luminosité au
+voisinage 8 à 17, contre 66 à 76 pour les chiffres et cordons blancs : aucun seuil possible. En couleur seule, 7 à 8 trous
+sur 8 à 10 ressortaient au-dessus de tout le reste. Le contrôle v30 (« un nouveau trou doit assombrir ») les écartait.
+
+Nouvelle méthode (photos à la longue-vue et mode direct, `colorRaster`, `colorDiff`, `colRefine`) : chaque image est relevée
+en Lab tous les 0,5 mm dans le repère de la cible (jusqu'à 125 mm) ; recalage fin affine sur la précédente (`lkAlign`,
+jusqu'à 1 mm corrigé au bord du visuel) ; flou égalisé par carrés de 20 mm (le bas des photos du 15/11 est plus flou) ;
+écart de chaque case à la plage de l'image précédente sur ± 0,5 mm, luminosité comptée à 30 % ; moyenne sur 5,5 mm ;
+maxima locaux tous les 5 mm. Un changement centré sur un chiffre imprimé compte moitié, sur un ancien trou 20 % de moins.
+Avec le nombre de coups annoncé, on garde les meilleurs candidats : impact trouvé sur la photo s'il a changé (au moins 9
+et la moitié du plus fort changement), changement seul s'il dépasse 10 et le candidat suivant de 20 %. Position d'un
+changement seul : barycentre de la zone, pointillé « à vérifier » comme en v30.
+
+Prototype hors appli (Python) avant codage : le plus fort changement était le vrai coup 25 fois sur 28 paires (06/11,
+hors balle passée dans un trou) et 5 sur 6 (15/11). Réglages choisis sur ces deux séances : risque de sur-ajustement.
+
+Mode direct : un coup placé par le changement de couleur n'est plus effacé ; l'image ne redevient référence qu'au-delà de
+6 % d'échelle ou 25 % de lumière (2 % et 8 % avant : le 15/11, chaque image repartait de zéro). Direct simulé (chaque photo
+vue 3 fois) : 06/11, 23 annonces justes sur 29 coups et 1 fausse (série 21, balle sans trace) ; 15/11, 5 justes, 0 fausse
+(v30 : 0 annonce). 64 images sans coup (décalées, plus ou moins claires et floues) : 0 fausse annonce.
+
+Assistant de calage (onglet Longue-Vue) : toutes les 2 s avant la surveillance, puis à chaque image, la ligne « Cadrage »
+dit en vert, orange ou rouge si la cible est centrée dans l'oculaire, jusqu'où elle est visible tout autour, la netteté
+(largeur du bord du visuel) et la résolution, avec un conseil. Repère : photos 6 à 9 du 15/11 (« acceptable », 3,8 px/mm,
+bord flou sur 2 à 3 mm). Zoomer au-delà n'apporte rien : la détection travaille à 3,5 px/mm.
+
+Banc après v31 : 06/11 27 sur 30, 1 en trop (3 en v30) ; 01/11 5 sur 5, 0 en trop (1) ; 02/10, 04/10, DDM4, 11/10 et
+23/10 strictement identiques. 15/11 en mode séries (hors banc, vérité à fixer) : 6 coups justes sur 15, 2 faux (v30 : 2
+justes, 5 faux) ; les photos 1 à 4 restent mal servies (calage refusé sur la 2, oculaire non repéré sur la 3 et la 4,
+première photo sans comparaison). Temps ajouté par image sur ordinateur : environ 1 s.
+
 ## Pistes d'évolution
 
 L'utilisateur a dit avoir des idées d'évolution sans les avoir encore détaillées : demande-les lui avant de
