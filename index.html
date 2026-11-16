@@ -2609,10 +2609,12 @@ const lvLin = l => Math.pow(Math.max(1, l)/255, 2.2);   // valeur d'écran → l
 // erreur. D'où une sonde : après l'ISO deviné, on demande un ISO deux fois plus fort (ou quatre fois plus faible si le
 // blanc est très clair, huit fois s'il sature) et l'on attend, jusqu'à 3 s, que la luminosité suive. Sans réponse, la caméra n'applique pas l'ISO :
 // exposition rendue à l'automatique. Avec réponse, le délai mesuré règle l'attente des essais suivants.
-async function lvLumSuit(L1, sens, maxMs){         // attend que la luminosité monte (sens > 0) ou baisse d'au moins 40 % (en lumière)
+// attend que la luminosité monte (sens > 0) ou baisse d'au moins 40 % (en lumière) ; partant d'un blanc saturé (sat), toute
+// baisse visible suffit : le papier peut être presque blanc même à l'ISO le plus bas (scène très claire)
+async function lvLumSuit(L1, sens, maxMs, sat){
   const t0 = performance.now(); let L = null;
   while (performance.now() - t0 < maxMs){ await lvSleep(150); L = lvLumOnce(); if (L == null) return null;
-    const r = lvLin(L)/lvLin(L1); if (sens > 0 ? r > 1.4 : r < 0.6) return {dt: performance.now() - t0}; }
+    const r = lvLin(L)/lvLin(L1); if (sat ? L < 245 : sens > 0 ? r > 1.4 : r < 0.6) return {dt: performance.now() - t0}; }
   return {dt: Infinity};
 }
 async function lvFigerExposition(t, caps, st, acc, L0){
@@ -2628,9 +2630,13 @@ async function lvFigerExposition(t, caps, st, acc, L0){
   if (iso2 === iso){ sens = -sens; iso2 = clamp(sens > 0 ? 2*iso : iso/bas); }
   if (iso2 === iso) return {ignore: true};
   await pose(iso2);
-  const rep = await lvLumSuit(L1b, sens, 3000); if (!rep) return null;
-  if (!isFinite(rep.dt)){ try { await pose(iso); } catch(e){} return {ignore: true}; }
-  wait = Math.max(450, Math.min(2500, 1.5*rep.dt + 200)); iso = iso2; await lvSleep(Math.min(1000, wait - rep.dt + 150));
+  const sat = sens < 0 && Lh >= 250, rep = await lvLumSuit(L1b, sens, 3000, sat); if (!rep) return null;
+  // Partant d'un blanc saturé, une image restée blanche ne prouve rien (contrôle de la v34 : scène très claire, ISO
+  // automatique près du minimum du capteur, la v34 concluait à tort que l'ISO était ignoré) : on poursuit alors la recherche
+  // comme la v33, sans conclure. Hors saturation, aucune réponse en 3 s : la caméra n'applique pas l'ISO.
+  if (!isFinite(rep.dt) && !sat){ try { await pose(iso); } catch(e){} return {ignore: true}; }
+  wait = isFinite(rep.dt) ? Math.max(450, Math.min(2500, 1.5*rep.dt + 200)) : 450; iso = iso2;
+  await lvSleep(isFinite(rep.dt) ? Math.min(1000, wait - rep.dt + 150) : 0);
   for (let it = 0; it < 6; it++){
     const L = await lvLum(); if (L == null) return null;
     ratio = lvLin(L0)/lvLin(L);
@@ -2640,7 +2646,7 @@ async function lvFigerExposition(t, caps, st, acc, L0){
     if (next === iso) break; iso = next;
     await pose(iso); await lvSleep(wait);
   }
-  return {iso, ratio};
+  return {iso, ratio, incertain: !isFinite(rep.dt)};
 }
 async function lvFigerCamera(){
   const t = lvTrack(); lvFige = []; lvFigeExpo = "";
@@ -2652,7 +2658,8 @@ async function lvFigerCamera(){
     try { r = await lvFigerExposition(t, caps, st, acc, L0); } catch(e){ r = null; }
     if (r && !r.ignore && Math.abs(Math.log(r.ratio)) < Math.log(1.25)){
       acc = {...acc, exposureMode: "manual", iso: r.iso}; lvFige.push("exposition");
-      lvFigeExpo = `luminosité à ${Math.round(100*Math.abs(Math.pow(r.ratio, 1/2.2) - 1))} % près`;
+      lvFigeExpo = r.incertain ? "papier presque blanc : je ne peux pas contrôler que l'ISO est appliqué"
+        : `luminosité à ${Math.round(100*Math.abs(Math.pow(r.ratio, 1/2.2) - 1))} % près`;
     } else {
       lvFigeExpo = r && r.ignore ? "exposition laissée en automatique : la caméra n'applique pas l'ISO demandé"
         : r ? "exposition laissée en automatique : la luminosité ne revenait pas à celle du calage"

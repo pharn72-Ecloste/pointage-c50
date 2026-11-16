@@ -233,10 +233,12 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
   verrouillée sans température imposée. Chrome ne relit pas ces verrous dans `getSettings()` : seule la luminosité est
   contrôlée. Vérifié sur une caméra simulée seulement, pas encore sur le téléphone.
 - Pile d'images, bruit du coup, sonde ISO (v34, direct Longue-Vue) : chaque analyse moyenne 3 images recalées (`lvStack`) ;
-  direct simulé 06/11 caméra figée 65 justes sur 87 contre 59 en v33, sans gain net en automatique ni sur le 15/11. La case
+  direct simulé 06/11 caméra figée 65 justes sur 87 contre 59 en v33 (contrôle sur six tirages : 126 contre 117 sur 174,
+  gain d'environ 5 %, pas nettement au-dessus du hasard), sans gain net en automatique ni sur le 15/11. La case
   « Analyser aussitôt après le bruit d'un coup » (décochée par défaut) avance l'analyse au bruit du départ : réglée sur des
   sons de synthèse, jamais entendue au stand ; avec des écouteurs Bluetooth, Android peut basculer sur le micro du casque
-  (non vérifié). La sonde ISO repère un téléphone qui ignore l'ISO ou l'applique lentement (caméra simulée seulement).
+  (non vérifié). La sonde ISO repère un téléphone qui ignore l'ISO ou l'applique lentement (caméra simulée seulement) ;
+  papier saturé en scène très claire : rien ne peut le prouver, le statut le dit.
   « Retirer le dernier coup » retire une fausse annonce en direct.
 - La rotation de la première photo n'est pas corrigée (seule la rotation entre photos d'une série l'est) :
   une photo penchée fausse la répartition horizontal/vertical, pas le score.

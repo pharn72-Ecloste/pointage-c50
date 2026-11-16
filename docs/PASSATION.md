@@ -416,7 +416,9 @@ bruit, hypothèses non mesurées sur le S21) :
 | 15/11 automatique, 1 tirage (13 coups) | 2 / 0 | 2 / 0 |
 
 Lecture : la pile ne sert que contre le bruit du capteur, pas contre une lumière qui flotte (partagée par les trois
-images) : le gain se voit caméra figée (+6 sur 87), pas en automatique (+2, dans le hasard des tirages). Rien sur le 15/11,
+images) : le gain se voit caméra figée (+6 sur 87), pas en automatique (+2, dans le hasard des tirages). Le contrôle
+indépendant de la PR #27, sur six tirages caméra figée du 06/11, trouve 126 justes sur 174 contre 117 (écarts par tirage
++4, +4, 0, +1, 0, 0) : un gain de l'ordre de 5 %, pas nettement au-dessus du hasard. À tenir pour probable, pas pour acquis. Rien sur le 15/11,
 où les coups manqués le sont pour d'autres raisons (photos mal cadrées). Confirmer sur 2 images au lieu de 3 donnait 23 et
 23 justes au lieu de 22 et 23, mais une fausse annonce de plus à chaque tirage : gardé à 3. Coût mesuré sur ordinateur :
 0,3 s par analyse pour trois images de 2000 × 1500 ; sur le téléphone, je ne l'ai pas mesuré.
@@ -443,6 +445,18 @@ délai mesuré règle l'attente des essais suivants. Caméra simulée (script du
 délai de 0,3 à 0,9 s, scène claire avec délai, dérive de lumière, ISO refusé ou absent : luminosité rendue à 1 % près ou
 repli annoncé, 2 à 10 s pour caler et figer. Balance des blancs et mise au point : toujours non vérifiables (Chrome ne les
 relit pas).
+
+Défaut trouvé au contrôle de la PR #27, corrigé : en scène très claire (ISO automatique près du minimum du capteur), l'ISO
+deviné sature le blanc et, même à l'ISO le plus bas, le papier reste presque blanc ; la baisse de 40 % attendue ne venait
+jamais et la v34 concluait « la caméra n'applique pas l'ISO », là où la v33 figeait correctement. Partant d'un blanc saturé,
+toute baisse visible suffit désormais, et une image restée blanche ne prouve plus rien : la recherche continue comme en v33
+et le statut dit « papier presque blanc : je ne peux pas contrôler que l'ISO est appliqué ». Caméra simulée, 20 scénarios
+dont 4 en scène claire : clair (ISO auto 55) figé à 3 % près comme en v33 ; ISO auto au minimum (50) figé, statut prudent ;
+clair avec 0,7 s de délai figé à 3 % ; téléphone qui ignore l'ISO en scène claire : image juste, statut prudent (le défaut
+« statut faux » ne peut pas être levé quand le papier sature déjà en automatique). Les 16 scénarios d'avant : inchangés.
+Reste non traité : au-delà de 3,5 s de délai, cas jugé rare au contrôle.
+Avec le micro, les trois images de confirmation tombent en 2 s environ au lieu de 9 : moins de temps pour que le carton se
+stabilise après l'impact. Non mesuré sur de vraies images.
 
 Banc d'essai (photos) : sortie de `npm test` identique à la v33. Rien n'a été essayé au stand ni sur le S21.
 
