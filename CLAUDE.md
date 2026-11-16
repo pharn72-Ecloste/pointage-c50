@@ -32,6 +32,7 @@ pas à pas, sans jargon, et propose toujours le chemin le plus simple.
 | `tests/detection.test.cjs` | Test de non-régression de la détection. |
 | `tests/photos/` | Séances réelles : 02/10/2026 (9 mm, 10 m, 3 photos), 04/10/2026 (9 mm, 25 m, 2 photos, plus deux recadrages pour le calage), DDM4 .300 BLK (25 m, 3 photos de 5 coups ; la série 1 porte les annotations au pied à coulisse de l'utilisateur), 11/10/2026 (9 mm, 25 m, 5 photos : 10 + 5 + 5 + 5 + 5 coups), 23/10/2026 (P320 X-Carry, 9 mm, 15 m, fond bleu, 6 photos de 5 coups), 01/11/2026 (9 mm, 25 m, photos prises à l'oculaire d'une longue-vue, cible à 10 noir, 5 photos d'un coup), 06/11/2026 (9 mm, 25 m, images de la caméra en mode Longue-Vue ramenées à 2600 px, cible à 10 blanc, 30 photos d'un coup), 15/11/2026 (9 mm, 25 m, photos à travers la longue-vue ramenées à 2600 px, cible à 10 blanc, fond clair derrière la cible, 9 photos pour 15 coups). |
 | `tests/direct-simule.cjs` | Direct Longue-Vue simulé sur une séance (images bruitées, caméra automatique ou figée), hors de `npm test`. |
+| `tests/direct-camera.cjs` | Direct de bout en bout avec caméra et micro simulés : délai entre un coup et son annonce, avec ou sans le bruit du coup, hors de `npm test`. |
 | `tests/attendu*.json` | Résultats de référence, vérifiés sur l'image et contre le comptage de l'utilisateur. |
 | `tests/verite-*.json` | Vérité terrain : positions de l'utilisateur après correction, tirées de sa sauvegarde `.json`. Base du banc d'essai. |
 | `docs/PASSATION.md` | Historique, mesures au pied à coulisse, décisions et pistes. |
@@ -44,13 +45,13 @@ puis propose la fusion.
 
 À chaque livraison :
 
-1. Incrémente le numéro de version affiché sous le titre : cherche `· v33` dans `index.html`.
-2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v33`).
+1. Incrémente le numéro de version affiché sous le titre : cherche `· v34` dans `index.html`.
+2. Incrémente le nom du cache dans `sw.js` (`pointage-c50-v34`).
 3. Dis à l'utilisateur quel numéro il doit lire sur son téléphone pour confirmer la mise à jour.
 
 Les séances sont stockées dans le `localStorage` du téléphone (`c50_seances`, `c50_settings`,
 `c50_hmetric`, et depuis la v15 `c50_tireurs` : la liste des tireurs et de leurs armes ; depuis la v16, chaque arme
-porte aussi `click` et `unit`, la valeur d'un clic de ses organes de visée ; depuis la v23, `c50_lvcam` garde l'objectif et le zoom choisis en mode Longue-Vue, et depuis la v32 `fige: false` si l'utilisateur a décoché « Figer la lumière et la mise au point »). **Ne change jamais leur format sans conserver la lecture de l'ancien** : il n'existe
+porte aussi `click` et `unit`, la valeur d'un clic de ses organes de visée ; depuis la v23, `c50_lvcam` garde l'objectif et le zoom choisis en mode Longue-Vue, et depuis la v32 `fige: false` si l'utilisateur a décoché « Figer la lumière et la mise au point », depuis la v34 `son: true` s'il a coché « Analyser aussitôt après le bruit d'un coup »). **Ne change jamais leur format sans conserver la lecture de l'ancien** : il n'existe
 aucune autre copie que les sauvegardes `.json` que l'utilisateur fait à la main. Une séance contient
 `shots: [[x, y, série, pointsCorrigés?], …]` en millimètres, origine au centre, y vers le haut.
 Depuis la v15, une séance peut porter `tireur` : le nom d'un autre tireur. Les séances du propriétaire du
@@ -231,6 +232,14 @@ réécrire la référence pour faire passer un test, c'est perdre le garde-fou.
   juste avant ; à plus de 25 % d'écart, l'exposition repasse en automatique et le statut le dit. La balance des blancs est
   verrouillée sans température imposée. Chrome ne relit pas ces verrous dans `getSettings()` : seule la luminosité est
   contrôlée. Vérifié sur une caméra simulée seulement, pas encore sur le téléphone.
+- Pile d'images, bruit du coup, sonde ISO (v34, direct Longue-Vue) : chaque analyse moyenne 3 images recalées (`lvStack`) ;
+  direct simulé 06/11 caméra figée 65 justes sur 87 contre 59 en v33 (contrôle sur six tirages : 126 contre 117 sur 174,
+  gain d'environ 5 %, pas nettement au-dessus du hasard), sans gain net en automatique ni sur le 15/11. La case
+  « Analyser aussitôt après le bruit d'un coup » (décochée par défaut) avance l'analyse au bruit du départ : réglée sur des
+  sons de synthèse, jamais entendue au stand ; avec des écouteurs Bluetooth, Android peut basculer sur le micro du casque
+  (non vérifié). La sonde ISO repère un téléphone qui ignore l'ISO ou l'applique lentement (caméra simulée seulement) ;
+  papier saturé en scène très claire : rien ne peut le prouver, le statut le dit.
+  « Retirer le dernier coup » retire une fausse annonce en direct.
 - La rotation de la première photo n'est pas corrigée (seule la rotation entre photos d'une série l'est) :
   une photo penchée fausse la répartition horizontal/vertical, pas le score.
 

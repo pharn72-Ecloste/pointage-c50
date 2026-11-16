@@ -12,16 +12,19 @@ const truth = JSON.parse(fs.readFileSync(VER, "utf8")).shots;
 const photos = fs.readdirSync(DIR).filter(f => f.endsWith(".jpg")).sort();
 const P = { auto: { g: 0.08, wb: 0.03, sh: 3, nz: 5 }, fige: { g: 0.01, wb: 0.005, sh: 3, nz: 5 }, net: { g: 0, wb: 0, sh: 0, nz: 0 } }[MODE];
 (async () => {
-  const b = await chromium.launch(); const p = await b.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
+  const b = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}); const p = await b.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
   if (FLAGS) await p.addInitScript(f => { for (const k of f.split(",")){ const [a, v] = k.split("="); window[a] = v === undefined ? true : +v; } }, FLAGS);
   await p.goto("file://" + path.resolve(APP)); await p.waitForFunction(() => window.__c50 && window.__c50.state.img); await p.selectOption("#fCal", "9.0");
   await p.evaluate(([P, seed]) => { let s = seed >>> 0; window.__rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
     const gauss = () => { let u = 0, v = 0; while (!u) u = __rnd(); v = __rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); };
-    window.__frame = (im) => { const sc = Math.min(1, 2600/Math.max(im.naturalWidth, im.naturalHeight)), W = Math.round(im.naturalWidth*sc), H = Math.round(im.naturalHeight*sc);
+    // une rafale (pile d'images, v34) partage le gain, la balance des blancs et le décalage de base ; chaque image ajoute
+    // ±0,5 px de tremblement et son propre bruit de capteur (hypothèses, non mesurées sur le téléphone)
+    window.__burst = () => ({ dx: (__rnd()*2-1)*P.sh, dy: (__rnd()*2-1)*P.sh, gain: 1 + (__rnd()*2-1)*P.g, wr: 1 + (__rnd()*2-1)*P.wb, wbb: 1 + (__rnd()*2-1)*P.wb });
+    window.__frame = (im, B) => { B = B || __burst(); const sc = Math.min(1, 2600/Math.max(im.naturalWidth, im.naturalHeight)), W = Math.round(im.naturalWidth*sc), H = Math.round(im.naturalHeight*sc);
       const c = document.createElement("canvas"); c.width = W; c.height = H; const g = c.getContext("2d");
-      const dx = (__rnd()*2-1)*P.sh, dy = (__rnd()*2-1)*P.sh; g.drawImage(im, dx, dy, W, H);
+      const j = B.jit ? 0.5 : 0, dx = B.dx + (__rnd()*2-1)*j, dy = B.dy + (__rnd()*2-1)*j; g.drawImage(im, dx, dy, W, H);
       if (!P.g && !P.nz) return c;
-      const gain = 1 + (__rnd()*2-1)*P.g, gr = gain*(1 + (__rnd()*2-1)*P.wb), gb = gain*(1 + (__rnd()*2-1)*P.wb);
+      const gain = B.gain, gr = gain*B.wr, gb = gain*B.wbb;
       const d = g.getImageData(0, 0, W, H), a = d.data;
       for (let i = 0; i < a.length; i += 4){ const n = P.nz ? gauss()*P.nz : 0;
         a[i] = a[i]*gr + n; a[i+1] = a[i+1]*gain + n; a[i+2] = a[i+2]*gb + n; }
@@ -38,7 +41,8 @@ const P = { auto: { g: 0.08, wb: 0.03, sh: 3, nz: 5 }, fige: { g: 0.01, wb: 0.00
     }
     const ann = [];
     for (let k = 0; k < FR; k++){ frames++;
-      const r = await p.evaluate(() => { const c = window.__c50, raw = __frame(__im), o = c.lvFindOculaire(raw) || window.__circle;
+      const r = await p.evaluate(() => { const c = window.__c50, K = window.__lvStack || 1, B = __burst(); B.jit = K > 1;
+        const raw = K > 1 ? c.lvStack(Array.from({length: K}, () => __frame(__im, B))) : __frame(__im, B), o = c.lvFindOculaire(raw) || window.__circle;
         const n = c.lvFrame(c.lvCrop(raw, o)); window.__avgN = (window.__avgN || []); window.__avgN.push(c.state.prevCol ? (c.state.prevCol.avgN || 1) : 0); return n ? n.map(q => [+q.x.toFixed(1), +q.y.toFixed(1)]) : null; });
       if (!r) continue;
       for (const q of r){ let bi = -1, bd = 1e9; truth.forEach((t, j) => { if (used.has(j) || t[2] <= calI || t[2] > i) return; const d = Math.hypot(t[0]-q[0], t[1]-q[1]); if (d < bd){ bd = d; bi = j; } });

@@ -393,6 +393,73 @@ Lecture : figer la caméra est le gain le plus net (+12 sur 87), à condition qu
 moyennée ne fait guère mieux que le hasard des tirages ; gardée car elle n'ajoute pas de temps et ôte 2 fausses annonces
 sur 3 en mode figé, à surveiller. Banc d'essai (photos) inchangé : ces deux changements ne touchent que le direct.
 
+## v34 (16/11/2026) : pile d'images, analyse au bruit du coup, retrait d'une annonce, sonde ISO
+
+Suite de l'étude des applis similaires. L'utilisateur n'a pas le temps d'essayer Impact Pro AI ni Tirium et a demandé de
+s'inspirer de ce qui paraît prometteur. Aucun éditeur ne publie sa méthode : seuls des comportements visibles sont repris.
+Impact Pro AI (mode jumelles) analyse toutes les 3 s, comme nous, et permet d'ajouter ou de retirer un impact en direct ;
+les caméras de stand et le brevet Shotspot (US 9 129 356) travaillent sur des piles d'images. Un détecteur appris (IA) reste
+écarté : deux séances longue-vue au banc (06/11, 15/11), c'est trop peu pour entraîner quoi que ce soit sans sur-ajuster.
+
+Pile d'images (`lvStack`, `lvRawStack`, `LV_STACK` = 3) : chaque analyse moyenne trois images de la caméra prises à environ
+0,15 s d'écart, recalées sur la première (translation de Lucas-Kanade sur une image réduite au quart : erreur sous 0,2 px
+sur des décalages de 1 à 12 px). Une image décalée de plus de 8 px, ou qui reste différente après recalage, est laissée de
+côté. La v32 moyennait déjà la référence ; la v34 moyenne aussi l'image courante. Direct simulé (`tests/direct-simule.cjs`,
+5 images par photo ; une rafale partage gain, balance des blancs et décalage, avec ±0,5 px de tremblement et son propre
+bruit, hypothèses non mesurées sur le S21) :
+
+| | v33 | v34 |
+|---|---|---|
+| 06/11 figée, 3 tirages (87 coups) | 59 justes / 1 fausse | 65 / 1 |
+| 06/11 automatique, 3 tirages | 49 / 0 | 51 / 1 |
+| 15/11 figée, 2 tirages (26 coups) | 9 / 0 | 9 / 0 |
+| 15/11 automatique, 1 tirage (13 coups) | 2 / 0 | 2 / 0 |
+
+Lecture : la pile ne sert que contre le bruit du capteur, pas contre une lumière qui flotte (partagée par les trois
+images) : le gain se voit caméra figée (+6 sur 87), pas en automatique (+2, dans le hasard des tirages). Le contrôle
+indépendant de la PR #27, sur six tirages caméra figée du 06/11, trouve 126 justes sur 174 contre 117 (écarts par tirage
++4, +4, 0, +1, 0, 0) : un gain de l'ordre de 5 %, pas nettement au-dessus du hasard. À tenir pour probable, pas pour acquis. Rien sur le 15/11,
+où les coups manqués le sont pour d'autres raisons (photos mal cadrées). Confirmer sur 2 images au lieu de 3 donnait 23 et
+23 justes au lieu de 22 et 23, mais une fausse annonce de plus à chaque tirage : gardé à 3. Coût mesuré sur ordinateur :
+0,3 s par analyse pour trois images de 2000 × 1500 ; sur le téléphone, je ne l'ai pas mesuré.
+
+Analyse au bruit du coup (case « Analyser aussitôt après le bruit d'un coup », décochée par défaut, gardée dans
+`c50_lvcam.son`) : le micro du téléphone est écouté toutes les 30 ms (crête au-dessus de 0,5 et énergie huit fois au-dessus
+du fond, une fois par seconde au plus). Le son ne décide de rien : il avance seulement l'analyse (0,5 s après le bruit, le
+temps que les vibrations cessent) puis la répète sans attendre les 3 s pendant 8 s, jusqu'à l'annonce. Les coups des
+voisins déclenchent aussi une analyse, sans rien annoncer de plus. Essai sur un signal de synthèse de 20 s : 4 coups sur 4
+retrouvés, rien sur une voix forte (crête 0,35), un claquement (0,45) ni un vent qui monte ; deux coups à 0,4 s d'écart n'en
+font qu'un. Direct de bout en bout avec caméra et micro simulés (`tests/direct-camera.cjs`, photos 12 à 18 du 06/11,
+ordinateur) : 5 coups sur 6 annoncés dans les deux cas, délai moyen 16,1 s sans le son, 9,3 s avec. Sur le téléphone le
+temps de calcul dominera : je ne peux pas chiffrer le gain là-bas. Risque non vérifié : avec des écouteurs Bluetooth,
+Android peut prendre le micro du casque et passer le son en qualité « appel » ; d'où la case décochée par défaut.
+
+« Retirer le dernier coup » (onglet Longue-Vue) : retire la dernière annonce de la séance sans arrêter la surveillance ; le
+trou reste dans l'image de référence et n'est pas annoncé de nouveau.
+
+Défauts de la v33 relevés au contrôle, corrigés : un téléphone qui accepte la demande d'ISO sans l'appliquer, ou une caméra
+qui met plus de 0,65 s à l'appliquer, faisait afficher « luminosité à 0 % près » sur un ISO deviné. Une sonde suit
+maintenant l'ISO deviné : ISO doublé (ou divisé par 4, par 8 si le blanc sature) et attente, jusqu'à 3 s, que la luminosité
+suive. Sans réponse, l'exposition repasse en automatique et le statut dit « la caméra n'applique pas l'ISO demandé ». Le
+délai mesuré règle l'attente des essais suivants. Caméra simulée (script du contrôle v33) : 16 cas, dont « ignore »,
+délai de 0,3 à 0,9 s, scène claire avec délai, dérive de lumière, ISO refusé ou absent : luminosité rendue à 1 % près ou
+repli annoncé, 2 à 10 s pour caler et figer. Balance des blancs et mise au point : toujours non vérifiables (Chrome ne les
+relit pas).
+
+Défaut trouvé au contrôle de la PR #27, corrigé : en scène très claire (ISO automatique près du minimum du capteur), l'ISO
+deviné sature le blanc et, même à l'ISO le plus bas, le papier reste presque blanc ; la baisse de 40 % attendue ne venait
+jamais et la v34 concluait « la caméra n'applique pas l'ISO », là où la v33 figeait correctement. Partant d'un blanc saturé,
+toute baisse visible suffit désormais, et une image restée blanche ne prouve plus rien : la recherche continue comme en v33
+et le statut dit « papier presque blanc : je ne peux pas contrôler que l'ISO est appliqué ». Caméra simulée, 20 scénarios
+dont 4 en scène claire : clair (ISO auto 55) figé à 3 % près comme en v33 ; ISO auto au minimum (50) figé, statut prudent ;
+clair avec 0,7 s de délai figé à 3 % ; téléphone qui ignore l'ISO en scène claire : image juste, statut prudent (le défaut
+« statut faux » ne peut pas être levé quand le papier sature déjà en automatique). Les 16 scénarios d'avant : inchangés.
+Reste non traité : au-delà de 3,5 s de délai, cas jugé rare au contrôle.
+Avec le micro, les trois images de confirmation tombent en 2 s environ au lieu de 9 : moins de temps pour que le carton se
+stabilise après l'impact. Non mesuré sur de vraies images.
+
+Banc d'essai (photos) : sortie de `npm test` identique à la v33. Rien n'a été essayé au stand ni sur le S21.
+
 ## Pistes d'évolution
 
 L'utilisateur a dit avoir des idées d'évolution sans les avoir encore détaillées : demande-les lui avant de
